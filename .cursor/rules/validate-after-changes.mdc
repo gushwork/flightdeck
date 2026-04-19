@@ -1,0 +1,46 @@
+---
+description: Run TypeScript type check, lint, and dev build verification after every substantive code change
+alwaysApply: true
+---
+
+# Validate After Changes
+
+After every substantive edit (new files, modified logic, dependency changes, config changes), run these checks in order before declaring work complete:
+
+## Required checks
+
+```bash
+# 1. TypeScript — zero errors required
+npx tsc --noEmit
+
+# 2. Lint
+npm run lint
+
+# 3. Confirm dev server starts without module errors (if touching imports, providers, or layout)
+npm run dev
+# Wait for "✓ Ready in" with no "Module not found" or "child_process" errors in output
+```
+
+## Rules
+
+- **TypeScript must exit 0.** Fix all type errors before finishing — do not leave `any` suppressions or `@ts-ignore` without explanation.
+- **No `Module not found` errors in the dev server.** Node.js-only modules (`child_process`, `fs`, `path`, etc.) must never be imported — directly or transitively — by `"use client"` components or files in the client bundle. Keep server-only code in `app/api/`, `lib/aws/`, or `lib/github/` and only import types (not implementations) from those in client components.
+- **Lint warnings for pre-existing patterns** (e.g. Tailwind v4 `font-(family-name:--font-mono)` shorthand) may be ignored if they match the established codebase style in `app/page.tsx`.
+- **After fixing a build error**, always re-run `tsc --noEmit` to confirm the fix didn't introduce new errors.
+
+## Client/Server boundary rule
+
+```
+✅ Client components may import:
+   - types (type-only imports) from lib/github/types.ts
+   - pure utility functions with no Node.js deps (e.g. computeSummary, relativeTime)
+   - other client components
+
+❌ Client components must NOT import:
+   - lib/github/client.ts (uses child_process)
+   - lib/github/actions.ts (imports client.ts)
+   - lib/aws/* (uses AWS SDK / Node.js)
+   - Any file that transitively imports child_process, fs, path, etc.
+```
+
+If a pure utility like `computeSummary` is needed on both client and server, put it in `lib/github/types.ts` (or a dedicated `lib/github/utils.ts`) — never in a file that also imports Node.js modules.

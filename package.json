@@ -1,0 +1,91 @@
+{
+  "name": "flightdeck",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Flightdeck",
+  "description": "Local-first AWS and GitHub Actions control panel",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && node scripts/copy-standalone-assets.mjs",
+    "start": "next start",
+    "start:standalone": "node .next/standalone/server.js",
+    "lint": "eslint",
+    "electron:dev": "concurrently -k \"next dev\" \"wait-on http://127.0.0.1:3000 && cross-env FLIGHTDECK_ELECTRON_DEV=1 electron .\"",
+    "electron:pack": "npm run build && electron-builder --dir",
+    "electron:dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@aws-sdk/client-accessanalyzer": "^3.1029.0",
+    "@aws-sdk/client-amplify": "^3.1030.0",
+    "@aws-sdk/client-cloudtrail": "^3.1029.0",
+    "@aws-sdk/client-iam": "^3.1030.0",
+    "@aws-sdk/client-secrets-manager": "^3.1029.0",
+    "@aws-sdk/client-sts": "^3.1029.0",
+    "@aws-sdk/credential-providers": "^3.1030.0",
+    "next": "16.2.3",
+    "openai": "^6.34.0",
+    "pg": "^8.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.flightdeck.app",
+    "productName": "Flightdeck",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "standalone",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "publish": {
+      "provider": "github"
+    }
+  }
+}

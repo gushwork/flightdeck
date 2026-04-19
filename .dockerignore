@@ -1,0 +1,15 @@
+.git
+.github
+.next
+node_modules
+dist-electron
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml
+.env
+.env.*
+!.env.example
+coverage
+*.md
+.cursor
+**/.DS_Store

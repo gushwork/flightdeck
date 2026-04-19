@@ -1,0 +1,236 @@
+# Codebase Knowledge Base
+
+> Living document — updated by the agent on every substantive edit.  
+> Read this first when starting a new task.
+
+## Project Overview
+
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, IAM Access Analyzer, IAM cross-account copy, CloudTrail) and **GitHub Actions** monitoring and control, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
+
+Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
+
+## Module registry
+
+- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Utility** (IAM tools), and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify** and **IAM** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
+
+## Directory Structure
+
+```
+.
+├── PRD.md
+├── CODEBASE.md
+├── lib/
+│   ├── types.ts            # SecretEntry, SecretSearchResult, SecretValue, Amplify* DTOs
+│   ├── utils.ts
+│   ├── secret-value-format.ts
+│   ├── secret-string.ts      # coerceSecretStringForStorage — API create/PUT + lib/aws create/put always store SecretString as UTF-8 text
+│   ├── amplify-env-map.ts    # JSON / .env parsing for Amplify env maps (reuses secret-value-format)
+│   ├── db.ts                 # Optional Postgres pool (DATABASE_URL) for server cache
+│   ├── cache.ts              # getCached / setCache / invalidateCache — secrets list + tool handler cache
+│   ├── modules/
+│   │   └── registry.ts     # Feature flags + nav + agent tool group mapping; ModuleId now includes "github"
+│   ├── context/
+│   │   ├── aws-workspace-provider.tsx # Region + profile; saved profile names load after mount (hydration-safe); env + aws-saved-profiles; notifyAwsProfileListChanged
+│   │   ├── data-provider.tsx # Secrets list; reloads on region/profile change
+│   │   ├── chat-provider.tsx
+│   │   └── github-data-provider.tsx # Smart-polling GitHub Actions data; tiered intervals (8s active, 15s recent-fail, 60s idle); pauses on tab blur; immediate refetch after mutations; optimistic updates
+│   ├── hooks/
+│   │   ├── use-secrets.ts  # Standalone secrets fetcher (DataProvider is primary for UI)
+│   │   └── use-singleton-popover-dismiss.ts # Dismiss anchored popovers on outside click / Escape (data-popover-root + data-popover-key)
+│   ├── agent/
+│   │   ├── engine.ts
+│   │   ├── tools.ts        # buildAgentTools() from registry
+│   │   ├── tool-handlers.ts
+│   │   ├── filter.ts
+│   │   ├── prompts.ts
+│   │   ├── chat-client.ts  # buildMessagesForAgentApi — stable history for POST /api/agent/chat
+│   │   ├── openrouter-model.ts # DEFAULT_OPENROUTER_MODEL, resolveOpenRouterModel, storage key constant
+│   │   └── change-plan.ts  # PlanStep.apiCall.service: secretsmanager only
+│   └── aws/
+│       ├── client.ts      # getRegion, awsClientOptions (fromIni), profileCacheSegment, parseProfileParam
+│       ├── regions.ts     # AWS_REGIONS, AWS_REGION_LOCATIONS, formatRegionMenuLabel
+│       ├── workspace-query.ts # workspaceSearchParams(region, profile) for fetch URLs
+│       ├── secrets.ts      # list, batch get, get/put value, create, versions, describe, resource policy
+│       ├── amplify.ts      # ListApps, app snapshot, branch env, search env vars, UpdateApp/UpdateBranch env
+│       ├── iam.ts          # IAM search, exists, copy (roles/users/customer-managed policies), create-user (console access + keys + permission cloning from template); ListUsers, CreateLoginProfile, CreateAccessKey, password policy handling, sign-in URL generation
+│       ├── sts.ts          # getAccountId via GetCallerIdentity
+│       ├── analyzer.ts
+│       └── cloudtrail.ts
+├── lib/github/
+│   ├── client.ts           # gh CLI token extraction (exec `gh auth token`), 30-min in-process cache, `githubFetch` + `githubFetchPaginated` helpers
+│   ├── types.ts            # GHRepo, GHWorkflowRun, GHWorkflow, GHRunsSummary DTOs + status/conclusion union types; GHWorkflowListItem/Detail; computeSummary (client-safe); WorkflowDispatchInputSpec / WorkflowDispatchSchemaResponse
+│   ├── github-urls.ts      # Client-safe: isValidHttpsBadgeUrl, githubActionsWorkflowPageUrl (Actions UI vs file blob)
+│   ├── workflow-dispatch-schema.ts # Server-only: yaml → parse workflow_dispatch.inputs
+│   ├── workflow-dispatch-client.ts # initialDispatchInputValues, validate, serialize for POST body
+│   └── actions.ts          # listUserRepos, listWorkflows, listRepoRuns, listAllRuns (batched parallel); rerun/rerunFailed/cancel/dispatch/enable/disable/getRunLogsUrl; fetchAllWorkflowsFast; getWorkflowDetail
+├── components/
+│   ├── layout/
+│   │   ├── shell.tsx       # Page context for agent; sidebar + main + agent
+│   │   ├── topbar.tsx      # Renamed "Flightdeck" brand (was AWS Manager)
+│   │   ├── sidebar.tsx     # Renders from module registry; GitHub Octicon icon; pulsing activity dot when Actions are in-progress
+│   │   ├── loading-skeleton.tsx
+│   │   └── stale-badge.tsx
+│   ├── agent/
+│   │   ├── sidebar.tsx
+│   │   └── change-plan-card.tsx  # Copy CLI/JSON; Approve optional (off)
+│   ├── github/
+│   │   ├── run-utils.tsx        # Shared: StatusIcon, EventBadge, ElapsedTimer, formatDuration, relativeTime, isActiveStatus, isFailedConclusion
+│   │   ├── run-card.tsx         # Reusable workflow run card: status icon, metadata, contextual action buttons (cancel/re-run/view-logs)
+│   │   ├── run-filters.tsx      # Filter bar: status/repo/workflow/branch dropdowns + sort
+│   │   ├── dispatch-dialog.tsx  # Repo/workflow pickers + WorkflowDispatchForm (YAML inputs from dispatch-schema API)
+│   │   ├── workflow-dispatch-form.tsx # Ref + dynamic inputs; fetches GET …/dispatch-schema
+│   │   ├── use-run-mutations.ts # Hook: rerun/rerunFailed/cancel with optimistic updates and error handling
+│   │   ├── workflow-badge-image.tsx # Workflow status SVG from badge_url; https guard + onError hide
+│   │   └── workflow-drawer.tsx  # Slide-over: overview (stats, last run, badge), runs (event/conclusion, re-run failed), YAML; Actions URL + file URL; collapsible dispatch w/ feedback
+│   ├── amplify/
+│   │   ├── env-vars-editor.tsx
+│   │   └── amplify-env-bulk-modal.tsx
+│   ├── iam/
+│   │   └── overwrite-copy-dialog.tsx # Overwrite checkbox when target entity exists
+│   ├── secrets/
+│   │   ├── bulk-edit-modal.tsx
+│   │   └── secret-value-editor.tsx
+│   ├── confirm-dialog.tsx
+│   └── floating-action-bar.tsx
+├── app/
+│   ├── globals.css         # Design tokens + @theme font aliases
+│   ├── layout.tsx          # Fraunces, DM Sans, IBM Plex Mono
+│   ├── page.tsx            # Secrets-focused dashboard
+│   ├── settings/page.tsx
+│   ├── iam/page.tsx        # IAM module sub-dashboard (links to utilities)
+│   ├── iam/cross-account-copy/page.tsx # Search + copy UI
+│   ├── iam/create-user/page.tsx
+│   ├── amplify/page.tsx           # List Amplify apps
+│   ├── amplify/search/page.tsx    # Env variable search across apps/branches
+│   ├── amplify/[appId]/page.tsx  # App detail + per-branch env editing
+│   ├── secrets/...
+│   ├── analyzer/page.tsx
+│   ├── github/
+│   │   ├── page.tsx            # Actions summary dashboard: stat ribbon (in-progress/queued/24h-success/24h-failed), active runs, recent failures, health bars; j/k/1/2 keyboard nav
+│   │   ├── runs/page.tsx       # All-runs card grid: filterable (status/repo/workflow/branch), URL-synced, 2D arrow-key nav, dispatch trigger
+│   │   └── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
+│   └── api/
+│       ├── agent/chat/route.ts
+│       ├── amplify/
+│       │   ├── apps/route.ts
+│       │   ├── apps/[appId]/route.ts
+│       │   ├── apps/[appId]/branches/[branchName]/route.ts
+│       │   └── search/route.ts
+│       ├── analyzer/route.ts
+│       ├── iam/ (search, exists, copy, whoami, users, create-user)
+│       └── secrets/...
+└── .cursor/
+```
+
+## Architecture Decisions
+
+- **Module registry**: Navigation and agent tools are driven by one config so features can be toggled or re-added without scattered conditionals.
+- **DataProvider**: Loads **secrets** only; refetches when **region** or **profile** changes (see `AwsWorkspaceProvider`).
+- **AWS profile**: Optional named profile per request (`profile` query/body); server uses `@aws-sdk/credential-providers` `fromIni` when set; otherwise default credential chain. Cache keys: `secrets:{region}:{profileSegment}`.
+- **Server cache (optional)**: When `DATABASE_URL` is set, [`lib/cache.ts`](lib/cache.ts) uses Postgres for TTL’d JSON cache (secrets list reads and agent `list_secrets` path). Missing DB or connection errors fall back to uncached behavior; cache invalidation on secret create/delete/update routes.
+- **Agent tools**: `list_secrets`, `get_secret_metadata`, `list_analyzers`, `list_analyzer_findings`, `lookup_cloudtrail_events`, `propose_change` (registry-filtered).
+- **Change plans**: UI shows impact + copy CLI/JSON; no `/api/.../execute` in repo.
+- **IAM cross-account copy**: Source = workspace profile; target = **named** profile only (`/api/iam/copy` and `/api/iam/exists` require non-empty `targetProfile`). IAM entities are **global per AWS account** (not regional); region is still passed for SDK clients. User copy does not migrate passwords, MFA, or access keys.
+
+## Patterns & Conventions
+
+- **Application code segmentation** — [`.cursor/skills/aws-manager-code-segmentation/SKILL.md`](.cursor/skills/aws-manager-code-segmentation/SKILL.md): segment UI, `app/api/*`, `lib/aws/*`, components, and agent tools by feature module; use registry as the single nav/tool toggle source.
+- **Path alias**: `@/*` → project root
+- **Design tokens**: `:root` in [`app/globals.css`](app/globals.css); Tailwind v4 `bg-(--token)`. Page chrome: `--bg-deep` (~`#fafafa`). **Fields, tables, data panels, secondary/outline controls**: `--bg-field` / `--bg-surface` / `--bg-card` (white); `--bg-hover` for hover on those surfaces.
+- **Fonts** (see [`app/layout.tsx`](app/layout.tsx)): Fraunces (`--font-display`), DM Sans (`--font-sans`), IBM Plex Mono (`--font-mono`); classes `font-(family-name:--font-display|mono)`
+- **Light theme**
+- **AWS SDK v3** in `lib/aws/*`
+- **Route handlers**: Next.js 16 App Router, `dynamic = 'force-dynamic'` where needed
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `@aws-sdk/client-secrets-manager` | Secrets Manager |
+| `@aws-sdk/client-amplify` | Amplify (Gen 1) apps and env configuration |
+| `@aws-sdk/client-accessanalyzer` | Access Analyzer |
+| `@aws-sdk/client-cloudtrail` | CloudTrail lookup |
+| `@aws-sdk/client-iam` | IAM search and cross-account copy |
+| `@aws-sdk/client-sts` | GetCallerIdentity / account id |
+| `@aws-sdk/credential-providers` | `fromIni` for named profiles on API routes |
+| `pg` | Optional Postgres for [`lib/cache.ts`](lib/cache.ts) when `DATABASE_URL` is set |
+| `next` 16.2.3 | App Router |
+| `openai` | OpenRouter via OpenAI SDK |
+| `react-markdown` | Agent chat |
+
+## API Surface (current)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/secrets/list?region=&profile=` | List secrets metadata |
+| POST | `/api/secrets/values` | Body: `query`, `region`, optional `profile` |
+| GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret |
+| GET | `/api/secrets/[id]/versions?region=&profile=` | Versions |
+| GET | `/api/secrets/[id]/history?region=&profile=` | CloudTrail GetSecretValue events |
+| POST | `/api/secrets/create` | Body: `name`, `secretString`, optional `description`, `tags`, `region`, `profile` — creates secret in Secrets Manager |
+| POST | `/api/secrets/delete` | Body: `secretNames`, `region`, optional `profile` |
+| POST | `/api/agent/chat` | Body: `messages`, `page`, optional `region`, `profile`, `model` (OpenRouter id; defaults to env `OPENROUTER_MODEL` or built-in default) |
+| GET/POST | `/api/analyzer` | Query/body: `region`, optional `profile` |
+| GET | `/api/amplify/apps?region=&profile=&nextToken=` | Paginated Amplify app list |
+| GET | `/api/amplify/apps/[appId]?region=&profile=` | App snapshot (branches + environment variables) |
+| PUT | `/api/amplify/apps/[appId]` | Body: `environmentVariables` — update app-level env vars |
+| PUT | `/api/amplify/apps/[appId]/branches/[branchName]` | Body: `environmentVariables` — update branch env vars |
+| POST | `/api/amplify/search` | Body: `query`, `region`, optional `profile` — search env values/names across apps and branches |
+| POST | `/api/iam/search` | Body: `region`, optional `profile`, `query`, optional `types` (`role` \| `user` \| `policy`) — search IAM entities (paginated caps) |
+| POST | `/api/iam/exists` | Body: `region`, required `targetProfile`, `entityType`, plus `roleName` / `userName` / `sourcePolicyArn` — collision check in target account |
+| POST | `/api/iam/copy` | Body: `region`, optional `sourceProfile`, required `targetProfile`, `entityType`, `overwrite`, optional `deepCopy` (default false), identifiers — copy role, user, or customer-managed policy; deep copy adds groups for users, tags/boundary/instance profiles for roles, and policy attachment principals for managed policies (capped) |
+| GET | `/api/iam/users?region=&profile=` | List IAM usernames in current account/profile |
+| POST | `/api/iam/create-user` | Body: `region`, optional `profile`, `newUserName`, `templateUserName`, optional `includeGroups` — creates user, copies permissions from template, adds console password (PasswordResetRequired=true), access key; returns sign-in URL + credentials |
+| GET | `/api/iam/whoami?region=&profile=` | Returns `accountId` for labels |
+| GET | `/api/github/repos` | List all repos the authenticated gh CLI user can access |
+| GET | `/api/github/actions/runs?status=&repo=` | List workflow runs across repos (batched, 30/repo); computed summary |
+| POST | `/api/github/actions/runs` | Body: `action` (rerun\|rerun-failed\|cancel), `repoFullName`, `runId` |
+| GET | `/api/github/actions/workflows?repo=` | List workflows across repos |
+| POST | `/api/github/actions/workflows` | Body: `action` (dispatch\|enable\|disable), `repoFullName`, `workflowId`, optional `ref`/`inputs` |
+| GET | `/api/github/actions/runs/[runId]/logs?repo=` | Returns download URL for run logs |
+| GET | `/api/github/actions/workflows/list?repo=` | Fast workflow list: capped repos, parallel, timeouts; card grid fields only |
+| GET | `/api/github/actions/workflows/detail?repo=&workflowId=` | Full workflow detail: metadata + 15 recent runs + YAML file content (parallel) |
+| GET | `/api/github/actions/workflows/dispatch-schema?repo=&workflowId=` | Parses workflow YAML for `workflow_dispatch.inputs`; returns `suggestedRef` (default branch) |
+
+## AI Agent
+
+- **Read tools**: `list_secrets`, `get_secret_metadata`, `list_analyzers`, `list_analyzer_findings`, `lookup_cloudtrail_events` (subset depends on registry).
+- **Tool AWS context**: Chat request sends `region` and `profile`; `dispatch()` uses them for SDK calls and secret list cache keys.
+- **Model**: UI reads `openrouter-model` from localStorage (Settings); request body `model` overrides; server uses `resolveOpenRouterModel()` → `OPENROUTER_MODEL` env → default (`lib/agent/openrouter-model.ts`).
+- **Chat history**: `buildMessagesForAgentApi()` builds the POST body from the thread **before** optimistic UI updates so the latest user message is always included; change plans are keyed by stable assistant `id` (`ChatMessage.id`), not array index.
+- **`propose_change`**: Returns a plan over SSE; user copies CLI/JSON from the change plan card.
+- **Sanitization**: `sanitizeForLlm()` — no raw secret values in tool results.
+- **IAM pages**: `page: iam` in shell — prompts note IAM mutations are UI-only.
+
+## Access Analyzer & CloudTrail
+
+- Analyzer + CloudTrail behavior unchanged in `lib/aws/analyzer.ts` and `lib/aws/cloudtrail.ts`.
+
+## Secrets UI
+
+- List, search, detail, bulk edit, value editor — uses `useData()` for secrets list.
+- Secret detail page (`app/secrets/[id]/page.tsx`): **Details** panel shows full resource ARN (from list metadata or loaded value) with **Copy ARN**.
+
+## Amplify UI
+
+- [`app/amplify/page.tsx`](app/amplify/page.tsx): lists Gen 1 Amplify apps in the workspace region/profile.
+- [`app/amplify/[appId]/page.tsx`](app/amplify/[appId]/page.tsx): app detail with branches; edit app-level and per-branch environment variables (`components/amplify/env-vars-editor.tsx`, bulk modal).
+- [`app/amplify/search/page.tsx`](app/amplify/search/page.tsx): POST to `/api/amplify/search` to find env keys/values across apps and branches.
+
+## IAM UI
+
+- [`app/iam/page.tsx`](app/iam/page.tsx): module overview with cards for cross-account copy and create-user.
+- [`app/iam/cross-account-copy/page.tsx`](app/iam/cross-account-copy/page.tsx): search (type toggles), target profile select, copy with overwrite dialog when entity exists in target account.
+- [`app/iam/create-user/page.tsx`](app/iam/create-user/page.tsx): form with username input + template user dropdown (populated via `/api/iam/users`), optional group membership, confirmation dialog, success panel showing sign-in URL/credentials with copy buttons.
+
+## Dashboard
+
+- Secrets-only metrics: counts, rotation coverage, tags, stale secrets, triage links.
+
+## Gotchas
+
+- **Profile dropdown hydration**: Saved profile names from `localStorage` are applied after mount so SSR and the first client render match; the list briefly shows env-only options until the transition runs.
+- **Postgres cache**: If `DATABASE_URL` is unset or the DB is unreachable, listing secrets still works; caching is best-effort. Ensure `DATABASE_URL` and network access if you rely on cache for hot paths.
+- **IAM copy**: Target profile must be a named profile (not default chain). Add profiles via Settings / `NEXT_PUBLIC_AWS_PROFILES` / `aws-saved-profiles` in localStorage.
+- **IAM search**: Roles, users, and policies use **separate** match limits so heavy role results do not hide policies. Policy search uses `GetPolicy` for full ARNs, root policy names, and `path/name` forms before paginating `ListPolicies` (customer-managed / `Local` only). **Customer inline** policies are discovered by scanning roles/users with `ListRolePolicies` / `ListUserPolicies` (capped). Copying inline source creates a **customer-managed** policy of the same name on the target. Large accounts may still hit pagination caps; UI shows a truncated hint.
+- **Trust policies**: Heuristic account-ID substitution may not suit every cross-account trust pattern; review in AWS after copy.

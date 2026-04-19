@@ -1,0 +1,35 @@
+---
+description: Maintain a living knowledge base of the codebase in CODEBASE.md
+alwaysApply: true
+---
+
+# Codebase Knowledge Base
+
+Maintain `CODEBASE.md` at the project root as a living map of the codebase.
+
+## On Starting a Task
+
+Read `CODEBASE.md` before exploring code. Use it to orient yourself on project structure, key files, patterns, and conventions already discovered.
+
+## On Every Edit
+
+After making substantive code changes (new files, renamed files, new patterns, architecture shifts, dependency additions), append or update the relevant section in `CODEBASE.md`. Keep entries concise — one or two lines each.
+
+### What to Track
+
+- **File/directory purpose** — what each key file or folder does
+- **Architecture decisions** — why something is structured a certain way
+- **Patterns & conventions** — naming, error handling, state management
+- **Dependencies** — key libraries and what they're used for
+- **API surface** — routes, endpoints, tool interfaces
+- **Gotchas** — non-obvious behavior, workarounds, known quirks
+
+### What NOT to Track
+
+- Line-by-line change logs (that's what git is for)
+- Obvious boilerplate explanations
+- Temporary debugging notes
+
+## Format
+
+Use the section structure already in `CODEBASE.md`. Add new sections as the project grows. Remove entries for deleted files or deprecated patterns.
