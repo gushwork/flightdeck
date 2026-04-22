@@ -3,10 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { SearchableSelect } from "@/components/searchable-select";
 import type { ProvisionedIamUser, ListIamUsersResult } from "@/lib/aws/iam";
 
 const selectClass =
   "w-full max-w-md rounded-md border border-(--border) bg-(--bg-field) px-2 py-1.5 text-xs text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30";
+
+function formatAllCredentialsText(r: ProvisionedIamUser): string {
+  return [
+    `Console URL - ${r.signInUrl}`,
+    `Username - ${r.username}`,
+    `Password - ${r.password}`,
+    "",
+    `Access Key ID - ${r.accessKeyId}`,
+    `Access Secret Key ID - ${r.secretAccessKey}`,
+  ].join("\n");
+}
 
 export default function IamCreateUserPage() {
   const { region, profile } = useAwsWorkspace();
@@ -20,6 +32,7 @@ export default function IamCreateUserPage() {
   const [result, setResult] = useState<ProvisionedIamUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [copyAllDone, setCopyAllDone] = useState(false);
 
   const loadUsers = useCallback(async () => {
     if (!region) return;
@@ -75,6 +88,7 @@ export default function IamCreateUserPage() {
       if (!res.ok) {
         throw new Error(data.error || "Failed to create user");
       }
+      setCopyAllDone(false);
       setResult(data);
       setNewUserName("");
       setTemplateUserName("");
@@ -97,6 +111,17 @@ export default function IamCreateUserPage() {
     }
   };
 
+  const copyAllInformation = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(formatAllCredentialsText(result));
+      setCopyAllDone(true);
+      window.setTimeout(() => setCopyAllDone(false), 2000);
+    } catch (err) {
+      console.error("Copy all failed", err);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-8">
@@ -112,7 +137,7 @@ export default function IamCreateUserPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-(--text-primary) mb-1.5">
+          <label className="block text-xs font-medium text-(--text-secondary) mb-1.5">
             New username
           </label>
           <input
@@ -130,23 +155,22 @@ export default function IamCreateUserPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-(--text-primary) mb-1.5">
+          <label className="block text-xs font-medium text-(--text-secondary) mb-1.5">
             Copy permissions from user
           </label>
-          <select
+          <SearchableSelect
             value={templateUserName}
-            onChange={(e) => setTemplateUserName(e.target.value)}
+            onValueChange={setTemplateUserName}
             className={selectClass}
             required
             disabled={loadingUsers || creating || users.length === 0}
-          >
-            <option value="">Select a user to copy permissions from...</option>
-            {users.map((user) => (
-              <option key={user} value={user}>
-                {user}
-              </option>
-            ))}
-          </select>
+            placeholder="Select a user to copy permissions from..."
+            searchPlaceholder="Search users…"
+            options={[
+              { value: "", label: "Select a user to copy permissions from..." },
+              ...users.map((user) => ({ value: user, label: user })),
+            ]}
+          />
           {loadingUsers && <p className="mt-1 text-xs text-(--text-secondary)">Loading users...</p>}
           {usersError && <p className="mt-1 text-xs text-(--danger)">{usersError}</p>}
           {users.length === 0 && !loadingUsers && !usersError && (
@@ -171,7 +195,7 @@ export default function IamCreateUserPage() {
         <button
           type="submit"
           disabled={creating || !newUserName || !templateUserName || loadingUsers}
-          className="w-full rounded-xl bg-(--accent) px-6 py-3 text-sm font-medium text-white transition-all hover:bg-(--accent)/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {creating ? "Creating user..." : "Create IAM User with Console & Access Key"}
         </button>
@@ -184,14 +208,23 @@ export default function IamCreateUserPage() {
       )}
 
       {result && (
-        <div className="mt-8 rounded-2xl border border-(--border) bg-(--bg-field) p-6">
-          <h3 className="text-lg font-semibold text-(--text-primary) mb-4">
-            User created successfully
-          </h3>
+        <div className="mt-8 rounded-xl border border-(--border) bg-(--bg-field) p-6">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <h3 className="text-lg font-semibold text-(--text-primary)">
+              User created successfully
+            </h3>
+            <button
+              type="button"
+              onClick={copyAllInformation}
+              className="shrink-0 rounded-lg border border-(--border) bg-(--bg-elevated) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors hover:bg-(--bg-hover)"
+            >
+              {copyAllDone ? "Copied" : "Copy all information"}
+            </button>
+          </div>
           <div className="space-y-4 text-sm">
             <div>
               <div className="text-(--text-secondary) mb-0.5">Sign-in URL</div>
-              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded border border-(--border)">
+              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded-md border border-(--border)">
                 <span className="flex-1 break-all text-(--text-primary)">{result.signInUrl}</span>
                 <button
                   onClick={() => copyToClipboard(result.signInUrl, "sign-in URL")}
@@ -204,7 +237,7 @@ export default function IamCreateUserPage() {
 
             <div>
               <div className="text-(--text-secondary) mb-0.5">Username</div>
-              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded border border-(--border)">
+              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded-md border border-(--border)">
                 <span className="flex-1 text-(--text-primary)">{result.username}</span>
                 <button
                   onClick={() => copyToClipboard(result.username, "username")}
@@ -217,7 +250,7 @@ export default function IamCreateUserPage() {
 
             <div>
               <div className="text-(--text-secondary) mb-0.5">Password (change on first login)</div>
-              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded border border-(--border)">
+              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded-md border border-(--border)">
                 <span className="flex-1 text-(--text-primary) break-all">{result.password}</span>
                 <button
                   onClick={() => copyToClipboard(result.password, "password")}
@@ -231,7 +264,7 @@ export default function IamCreateUserPage() {
 
             <div>
               <div className="text-(--text-secondary) mb-0.5">Access Key ID</div>
-              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded border border-(--border)">
+              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded-md border border-(--border)">
                 <span className="flex-1 text-(--text-primary)">{result.accessKeyId}</span>
                 <button
                   onClick={() => copyToClipboard(result.accessKeyId, "access key ID")}
@@ -244,7 +277,7 @@ export default function IamCreateUserPage() {
 
             <div>
               <div className="text-(--text-secondary) mb-0.5">Secret Access Key</div>
-              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded border border-(--border)">
+              <div className="flex items-center gap-2 font-(family-name:--font-mono) text-xs bg-(--bg-surface) p-2 rounded-md border border-(--border)">
                 <span className="flex-1 text-(--text-primary) break-all">{result.secretAccessKey}</span>
                 <button
                   onClick={() => copyToClipboard(result.secretAccessKey, "secret access key")}

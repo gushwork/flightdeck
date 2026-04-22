@@ -6,7 +6,7 @@ import { ServiceDirectory } from "@/components/dashboard/service-directory";
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-5xl space-y-10">
       <header className="relative overflow-hidden rounded-2xl border border-(--border-hairline) bg-(--bg-elevated) px-6 py-7 shadow-sm sm:px-8 sm:py-8">
         <div
           className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-(--accent)/15 blur-3xl"
@@ -43,15 +43,15 @@ export default function DashboardPage() {
       <PlatformSpotlights />
 
       <section aria-labelledby="directory-heading" id="services-directory">
-        <div className="mb-4 flex items-baseline justify-between gap-4">
+        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <h2
             id="directory-heading"
-            className="font-(family-name:--font-display) text-xl text-(--text-primary)"
+            className="text-sm font-semibold text-(--text-primary)"
           >
             All tools
           </h2>
-          <span className="text-[11px] text-(--text-faint)">
-            Two columns on wide screens · click a header to expand
+          <span className="max-w-sm text-left text-[11px] leading-relaxed text-(--text-faint) sm:text-right">
+            One block per platform — scroll the list, or use the shortcuts above
           </span>
         </div>
         <ServiceDirectory />

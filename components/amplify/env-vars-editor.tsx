@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { parseEnvFile } from "@/lib/secret-value-format";
 
@@ -20,6 +21,7 @@ function rowsToRecord(rows: { key: string; value: string }[]): Record<string, st
 
 function EnvVarsEditorInner({
   title,
+  titleActions,
   variables,
   onSave,
   disabled,
@@ -27,6 +29,7 @@ function EnvVarsEditorInner({
   error,
 }: {
   title: string;
+  titleActions?: ReactNode;
   variables: Record<string, string>;
   onSave: (next: Record<string, string>) => Promise<void>;
   disabled?: boolean;
@@ -61,6 +64,18 @@ function EnvVarsEditorInner({
       if (next.has(index)) next.delete(index);
       else next.add(index);
       return next;
+    });
+  }
+
+  const allRevealed =
+    rows.length > 0 && rows.every((_, i) => revealed.has(i));
+
+  function toggleRevealAll() {
+    setRevealed((prev) => {
+      if (rows.length === 0) return prev;
+      const everyShown = rows.every((_, i) => prev.has(i));
+      if (everyShown) return new Set();
+      return new Set(rows.map((_, i) => i));
     });
   }
 
@@ -99,9 +114,44 @@ function EnvVarsEditorInner({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-(--text-primary)">{title}</h3>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 max-w-full flex-1 items-center gap-2">
+          <h3 className="min-w-0 shrink text-sm font-semibold text-(--text-primary)">
+            {title}
+          </h3>
+          {titleActions}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleRevealAll}
+            disabled={disabled || saving || rows.length === 0}
+            className="rounded-md border border-(--border) bg-(--bg-surface) p-1.5 text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary) disabled:opacity-50"
+            title={allRevealed ? "Hide all values" : "Show all values"}
+            aria-label={allRevealed ? "Hide all values" : "Show all values"}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden
+            >
+              {allRevealed ? (
+                <>
+                  <path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                  <circle cx="8" cy="8" r="2" />
+                </>
+              ) : (
+                <>
+                  <path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                  <line x1="3" y1="14" x2="13" y2="2" />
+                </>
+              )}
+            </svg>
+          </button>
           <button
             type="button"
             onClick={addRow}
@@ -221,6 +271,7 @@ function EnvVarsEditorInner({
 
 export function EnvVarsEditor(props: {
   title: string;
+  titleActions?: ReactNode;
   variables: Record<string, string>;
   onSave: (next: Record<string, string>) => Promise<void>;
   disabled?: boolean;

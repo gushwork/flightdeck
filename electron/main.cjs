@@ -77,7 +77,7 @@ async function createWindow() {
   let loadUrl;
 
   if (isDev) {
-    loadUrl = "http://127.0.0.1:3000";
+    loadUrl = "http://127.0.0.1:3325";
     await waitForServer(loadUrl);
   } else {
     const port = Number(process.env.FLIGHTDECK_PORT) || DEFAULT_PORT;

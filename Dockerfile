@@ -16,7 +16,7 @@ FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+ENV PORT=3325
 ENV HOSTNAME=0.0.0.0
 
 RUN groupadd --system --gid 1001 nodejs \
@@ -25,7 +25,7 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
 USER nextjs
-EXPOSE 3000
+EXPOSE 3325
 
 # Runtime env (set at `docker run` / compose): OPENROUTER_API_KEY, OPENROUTER_MODEL,
 # DATABASE_URL, NEXT_PUBLIC_*, AWS_* / profiles via mounted ~/.aws if using file creds.

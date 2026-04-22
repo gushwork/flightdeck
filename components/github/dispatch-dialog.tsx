@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { GHWorkflow } from "@/lib/github/types";
 import { WorkflowDispatchForm } from "@/components/github/workflow-dispatch-form";
+import { SearchableSelect } from "@/components/searchable-select";
 
 interface DispatchDialogProps {
   open: boolean;
@@ -35,7 +36,7 @@ function DispatchDialogContent({
   const [workflowId, setWorkflowId] = useState(
     defaultWorkflowId ? String(defaultWorkflowId) : "",
   );
-  const firstInputRef = useRef<HTMLSelectElement>(null);
+  const firstInputRef = useRef<HTMLButtonElement>(null);
 
   // Focus first field on open
   useEffect(() => {
@@ -67,8 +68,8 @@ function DispatchDialogContent({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal aria-labelledby="dispatch-title">
-      <div className="absolute inset-0 bg-black/25" onClick={onClose} />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--border) bg-(--bg-field) p-6 shadow-xl">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--border) bg-(--bg-elevated) p-6 shadow-xl">
         <h3 id="dispatch-title" className="text-base font-semibold text-(--text-primary)">
           Trigger workflow
         </h3>
@@ -79,37 +80,42 @@ function DispatchDialogContent({
         <div className="mt-5 space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-(--text-secondary)">Repository</span>
-            <select
+            <SearchableSelect
               ref={firstInputRef}
               value={repo}
-              onChange={(e) => {
-                setRepo(e.target.value);
+              onValueChange={(v) => {
+                setRepo(v);
                 setWorkflowId("");
               }}
               className={selectClass}
               required
-            >
-              <option value="">Select repository…</option>
-              {repos.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+              placeholder="Select repository…"
+              searchPlaceholder="Search repositories…"
+              options={[
+                { value: "", label: "Select repository…" },
+                ...repos.map((r) => ({ value: r, label: r })),
+              ]}
+            />
           </label>
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-(--text-secondary)">Workflow</span>
-            <select
+            <SearchableSelect
               value={workflowId}
-              onChange={(e) => setWorkflowId(e.target.value)}
+              onValueChange={setWorkflowId}
               className={selectClass}
               required
               disabled={!repo}
-            >
-              <option value="">Select workflow…</option>
-              {repoWorkflows.map((w) => (
-                <option key={w.id} value={String(w.id)}>{w.name}</option>
-              ))}
-            </select>
+              placeholder="Select workflow…"
+              searchPlaceholder="Search workflows…"
+              options={[
+                { value: "", label: "Select workflow…" },
+                ...repoWorkflows.map((w) => ({
+                  value: String(w.id),
+                  label: w.name,
+                })),
+              ]}
+            />
           </label>
         </div>
 
@@ -133,7 +139,7 @@ function DispatchDialogContent({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-(--border) bg-(--bg-surface) px-4 py-1.5 text-sm text-(--text-secondary) transition-colors hover:bg-(--bg-hover)"
+            className="rounded-lg border border-(--border) bg-(--bg-surface) px-4 py-1.5 text-sm text-(--text-secondary) transition-colors hover:bg-(--bg-hover) hover:text-(--text-secondary)"
           >
             Cancel
           </button>

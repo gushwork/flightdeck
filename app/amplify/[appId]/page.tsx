@@ -181,18 +181,18 @@ function AmplifyAppDetailInner() {
       {!loading && snapshot && (
         <>
           <section className="rounded-xl border border-(--border) bg-(--bg-card) p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setBulkTarget({ kind: "app" })}
-                disabled={savingApp || savingBranch !== null}
-                className="rounded-md border border-(--border) bg-(--bg-surface) px-3 py-1 text-xs font-medium text-(--text-secondary) hover:bg-(--bg-hover) disabled:opacity-50"
-              >
-                Bulk edit (JSON / .env)
-              </button>
-            </div>
             <EnvVarsEditor
               title="App-level environment variables"
+              titleActions={
+                <button
+                  type="button"
+                  onClick={() => setBulkTarget({ kind: "app" })}
+                  disabled={savingApp || savingBranch !== null}
+                  className="shrink-0 rounded-md border border-(--border) bg-(--bg-surface) px-3 py-1 text-xs font-medium text-(--text-secondary) hover:bg-(--bg-hover) disabled:opacity-50"
+                >
+                  Bulk edit (JSON / .env)
+                </button>
+              }
               variables={snapshot.appEnvironmentVariables}
               onSave={saveAppEnv}
               saving={savingApp}

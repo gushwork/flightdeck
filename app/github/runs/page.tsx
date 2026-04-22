@@ -176,7 +176,7 @@ function AllRunsPageContent() {
 
       if (e.key === "f" && !isInput) {
         e.preventDefault();
-        branchInputRef.current?.closest("form")?.querySelector("select")?.focus();
+        (document.querySelector("[data-focus-first]") as HTMLElement | null)?.focus();
         return;
       }
 
@@ -320,7 +320,7 @@ function AllRunsPageContent() {
 
       {/* Errors */}
       {(error || mutationError) && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-(--danger)/20 bg-(--danger)/5 px-4 py-3 text-sm text-(--danger)">
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-(--danger)/20 bg-(--danger)/5 px-4 py-3 text-sm text-(--danger)">
           <span>{error ?? mutationError}</span>
           <button type="button" onClick={() => { clearError(); void refresh(); }} className="shrink-0 underline">
             Retry

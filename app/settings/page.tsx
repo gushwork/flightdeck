@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   useAwsWorkspace,
@@ -14,6 +15,7 @@ import {
   DEFAULT_OPENROUTER_MODEL,
   OPENROUTER_MODEL_STORAGE_KEY,
 } from "@/lib/agent/openrouter-model";
+import { SearchableSelect } from "@/components/searchable-select";
 
 const MODELS = [
   "anthropic/claude-sonnet-4-6",
@@ -23,7 +25,7 @@ const MODELS = [
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-base font-semibold text-(--text-primary)">
+    <h2 className="text-sm font-semibold text-(--text-primary)">
       {children}
     </h2>
   );
@@ -123,18 +125,18 @@ export default function SettingsPage() {
   }, [region, profile, model]);
 
   const selectClass =
-    "w-full rounded-md border border-(--border) bg-(--bg-field) px-3 py-2 text-sm text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30";
+    "w-full rounded-md border border-(--border) bg-(--bg-field) px-3 py-2 text-sm text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent)/20";
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <h1 className="font-(family-name:--font-display) text-3xl text-(--text-primary)">
+      <h1 className="font-(family-name:--font-display) text-2xl font-medium text-(--text-primary)">
         Settings
       </h1>
 
       {/* OpenRouter Configuration */}
       <section className="space-y-4">
         <SectionHeading>OpenRouter Configuration</SectionHeading>
-        <div className="rounded-lg border border-(--border) bg-(--bg-field) p-5 space-y-4">
+        <div className="rounded-xl border border-(--border) bg-(--bg-field) p-5 space-y-4">
           <div className="space-y-1.5">
             <FieldLabel>API Key</FieldLabel>
             <div className="relative">
@@ -161,17 +163,13 @@ export default function SettingsPage() {
 
           <div className="space-y-1.5">
             <FieldLabel>Model</FieldLabel>
-            <select
+            <SearchableSelect
               value={model}
-              onChange={(e) => handleModelChange(e.target.value)}
+              onValueChange={handleModelChange}
               className={selectClass}
-            >
-              {MODELS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              searchPlaceholder="Search models…"
+              options={MODELS.map((m) => ({ value: m, label: m }))}
+            />
           </div>
 
           <div className="flex items-center gap-3">
@@ -197,7 +195,7 @@ export default function SettingsPage() {
       {/* AWS Configuration */}
       <section className="space-y-4">
         <SectionHeading>AWS Configuration</SectionHeading>
-        <div className="rounded-lg border border-(--border) bg-(--bg-field) p-5 space-y-4">
+        <div className="rounded-xl border border-(--border) bg-(--bg-field) p-5 space-y-4">
           <p className="text-xs text-(--text-secondary)">
             Region and account profile match the top bar. You can also change
             them here.
@@ -205,31 +203,29 @@ export default function SettingsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <FieldLabel>Region</FieldLabel>
-              <select
+              <SearchableSelect
                 value={region}
-                onChange={(e) => setRegion(e.target.value)}
+                onValueChange={setRegion}
                 className={selectClass}
-              >
-                {regionOptions.map((r) => (
-                  <option key={r} value={r}>
-                    {formatRegionMenuLabel(r)}
-                  </option>
-                ))}
-              </select>
+                searchPlaceholder="Search regions…"
+                options={regionOptions.map((r) => ({
+                  value: r,
+                  label: formatRegionMenuLabel(r),
+                }))}
+              />
             </div>
             <div className="space-y-1.5">
               <FieldLabel>Account (profile)</FieldLabel>
-              <select
+              <SearchableSelect
                 value={profile}
-                onChange={(e) => setProfile(e.target.value)}
+                onValueChange={setProfile}
                 className={selectClass}
-              >
-                {accountSelectOptions.map((o) => (
-                  <option key={o.value || "default"} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+                searchPlaceholder="Search profiles…"
+                options={accountSelectOptions.map((o) => ({
+                  value: o.value,
+                  label: o.label,
+                }))}
+              />
             </div>
           </div>
 
@@ -271,7 +267,7 @@ export default function SettingsPage() {
       {/* Data Privacy */}
       <section className="space-y-4">
         <SectionHeading>Data Privacy</SectionHeading>
-        <div className="rounded-lg border border-(--border) bg-(--bg-field) p-5">
+        <div className="rounded-xl border border-(--border) bg-(--bg-field) p-5">
           <ul className="space-y-3">
             <PrivacyItem variant="warn">
               Policy documents, entity names, and tags <strong>are</strong> sent
@@ -290,6 +286,22 @@ export default function SettingsPage() {
           </ul>
         </div>
       </section>
+
+      <section className="border-t border-(--border-hairline) pt-6">
+        <p className="text-xs leading-relaxed text-(--text-muted)">
+          <Link
+            href="/design-system"
+            className="font-medium text-(--accent) hover:underline"
+          >
+            Design system
+          </Link>{" "}
+          — tokens, sidebar patterns, and UI conventions (detail in{" "}
+          <code className="rounded bg-(--bg-muted) px-1 py-0.5 font-(family-name:--font-mono) text-[10px]">
+            .cursor/rules/design-system.mdc
+          </code>
+          ).
+        </p>
+      </section>
     </div>
   );
 }
@@ -301,7 +313,6 @@ function PrivacyItem({
   variant: "success" | "warn";
   children: React.ReactNode;
 }) {
-  const iconColor = variant === "success" ? "var(--success)" : "var(--warn)";
   const bgColor =
     variant === "success" ? "bg-(--success-dim)" : "bg-(--warn-dim)";
 
@@ -313,11 +324,11 @@ function PrivacyItem({
           height="16"
           viewBox="0 0 16 16"
           fill="none"
-          stroke={iconColor}
+          stroke="currentColor"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="mt-0.5 shrink-0"
+          className="mt-0.5 shrink-0 text-(--success)"
         >
           <path d="M3.5 8.5l3 3 6-7" />
         </svg>
@@ -327,11 +338,11 @@ function PrivacyItem({
           height="16"
           viewBox="0 0 16 16"
           fill="none"
-          stroke={iconColor}
+          stroke="currentColor"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="mt-0.5 shrink-0"
+          className="mt-0.5 shrink-0 text-(--warn)"
         >
           <circle cx="8" cy="8" r="6.5" />
           <path d="M8 5v3.5M8 10.5v.5" />

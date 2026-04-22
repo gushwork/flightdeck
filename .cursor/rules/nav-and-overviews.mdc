@@ -15,6 +15,7 @@ When you add, rename, or remove **routes**, **nav labels**, or **tool entry poin
 | **App dashboard** (`/`) — “All tools” directory + platform spotlights | [`lib/modules/overview-directory.ts`](lib/modules/overview-directory.ts) — `DIRECTORY_GROUPS` (consumed by [`components/dashboard/service-directory.tsx`](components/dashboard/service-directory.tsx) and [`components/dashboard/platform-spotlights.tsx`](components/dashboard/platform-spotlights.tsx)). |
 | **AWS service overview** (`/aws`) | Same — `getAwsOverviewLead()` / `getAwsOverviewSubsections()` in `overview-directory.ts`. |
 | **GitHub service overview** (`/github/overview`) | Same — data for the GitHub group in `DIRECTORY_GROUPS`. |
+| **Design system** (`/design-system`) | Short operator-facing summary of tokens and sidebar conventions; linked from Settings. Authoritative class/pattern lists live in [`design-system.mdc`](./design-system.mdc). |
 
 `overview-directory.ts` is documented as aligning with `MODULE_NAV`; **labels and `href`s must match** the registry after changes.
 

@@ -5,13 +5,13 @@
 
 ## Project Overview
 
-Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, IAM Access Analyzer, IAM cross-account copy, CloudTrail) and **GitHub Actions** monitoring and control, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
 
 Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
 
 ## Module registry
 
-- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Utility** (IAM tools), and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify** and **IAM** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
+- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify**, **IAM**, **GitHub**, and **Fly** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
 
 ## Directory Structure
 
@@ -63,11 +63,14 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── workflow-dispatch-schema.ts # Server-only: yaml → parse workflow_dispatch.inputs
 │   ├── workflow-dispatch-client.ts # initialDispatchInputValues, validate, serialize for POST body
 │   └── actions.ts          # listUserRepos, listWorkflows, listRepoRuns, listAllRuns (batched parallel); rerun/rerunFailed/cancel/dispatch/enable/disable/getRunLogsUrl; fetchAllWorkflowsFast; getWorkflowDetail
+├── lib/fly/
+│   ├── types.ts            # FlyApp, FlyAppStatus, FlyMachine, MachineCheck, FlySecret DTOs (client-safe)
+│   └── cli.ts              # flyctl binary resolution (flyctl → fly), execFile JSON helpers, listApps, getAppStatus, getAppsStatus (bounded concurrency), listSecrets, setSecrets (stdin import), unsetSecrets
 ├── components/
 │   ├── layout/
 │   │   ├── shell.tsx       # Page context for agent; sidebar + main + agent
 │   │   ├── topbar.tsx      # Renamed "Flightdeck" brand (was AWS Manager)
-│   │   ├── sidebar.tsx     # Renders from module registry; GitHub Octicon icon; pulsing activity dot when Actions are in-progress
+│   │   ├── sidebar.tsx     # Registry-driven nav; collapsible AWS shell; expand/collapse all; brand marks + route-synced expansion; GitHub activity dot when Actions are busy
 │   │   ├── loading-skeleton.tsx
 │   │   └── stale-badge.tsx
 │   ├── agent/
@@ -85,6 +88,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── amplify/
 │   │   ├── env-vars-editor.tsx
 │   │   └── amplify-env-bulk-modal.tsx
+│   ├── fly/
+│   │   └── fly-secrets-bulk-panel.tsx # Key–value / JSON / .env bulk set panel (reuses amplify-env-map + secret-value-format parsers)
 │   ├── iam/
 │   │   └── overwrite-copy-dialog.tsx # Overwrite checkbox when target entity exists
 │   ├── secrets/
@@ -97,6 +102,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── layout.tsx          # Fraunces, DM Sans, IBM Plex Mono
 │   ├── page.tsx            # Secrets-focused dashboard
 │   ├── settings/page.tsx
+│   ├── design-system/page.tsx # Tokens + sidebar conventions summary; canonical detail in `.cursor/rules/design-system.mdc`
 │   ├── iam/page.tsx        # IAM module sub-dashboard (links to utilities)
 │   ├── iam/cross-account-copy/page.tsx # Search + copy UI
 │   ├── iam/create-user/page.tsx
@@ -109,6 +115,9 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   │   ├── page.tsx            # Actions summary dashboard: stat ribbon (in-progress/queued/24h-success/24h-failed), active runs, recent failures, health bars; j/k/1/2 keyboard nav
 │   │   ├── runs/page.tsx       # All-runs card grid: filterable (status/repo/workflow/branch), URL-synced, 2D arrow-key nav, dispatch trigger
 │   │   └── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
+│   ├── fly/
+│   │   ├── overview/page.tsx   # Fly app health grid: machines, regions, checks, deploy time; links to secrets and Fly dashboard
+│   │   └── secrets/page.tsx    # Per-app secrets CRUD: app selector (SearchableSelect), table with set/unset, bulk panel (Key–value / JSON / .env modes via FlySecretsBulkPanel)
 │   └── api/
 │       ├── agent/chat/route.ts
 │       ├── amplify/
@@ -119,6 +128,12 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │       ├── analyzer/route.ts
 │       ├── iam/ (search, exists, copy, whoami, users, create-user)
 │       └── secrets/...
+│       ├── fly/
+│       │   └── apps/
+│       │       ├── route.ts                    # GET list apps (optional ?status=1 for health)
+│       │       └── [app]/
+│       │           ├── status/route.ts         # GET app status (machines, health)
+│       │           └── secrets/route.ts        # GET list secrets; POST set/unset
 └── .cursor/
 ```
 
@@ -191,6 +206,10 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/github/actions/workflows/list?repo=` | Fast workflow list: capped repos, parallel, timeouts; card grid fields only |
 | GET | `/api/github/actions/workflows/detail?repo=&workflowId=` | Full workflow detail: metadata + 15 recent runs + YAML file content (parallel) |
 | GET | `/api/github/actions/workflows/dispatch-schema?repo=&workflowId=` | Parses workflow YAML for `workflow_dispatch.inputs`; returns `suggestedRef` (default branch) |
+| GET | `/api/fly/apps?status=1` | List Fly apps (optional `?status=1` adds per-app machine health) |
+| GET | `/api/fly/apps/[app]/status` | App status: machines, regions, checks, health badge |
+| GET | `/api/fly/apps/[app]/secrets` | List secret names + digests (values never returned) |
+| POST | `/api/fly/apps/[app]/secrets` | Body: `{ set?: Record<string,string>, unset?: string[] }` — set/remove secrets via flyctl |
 
 ## AI Agent
 

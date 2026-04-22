@@ -6,6 +6,7 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { AgentSidebar } from "@/components/agent/sidebar";
 import { useData } from "@/lib/context/data-provider";
+import { showAwsWorkspaceSelectors } from "@/lib/nav/aws-workspace-topbar";
 
 function derivePageContext(pathname: string): {
   page: string;
@@ -37,6 +38,9 @@ function derivePageContext(pathname: string): {
   if (pathname.startsWith("/settings"))
     return { page: "settings", entityId: null };
 
+  if (pathname === "/design-system")
+    return { page: "designSystem", entityId: null };
+
   if (pathname === "/iam" || pathname.startsWith("/iam/"))
     return { page: "iam", entityId: null };
 
@@ -45,6 +49,13 @@ function derivePageContext(pathname: string): {
 
   if (pathname.startsWith("/github"))
     return { page: "github", entityId: null };
+
+  if (pathname === "/fly/overview")
+    return { page: "flyOverview", entityId: null };
+  if (pathname === "/fly/secrets")
+    return { page: "flySecrets", entityId: null };
+  if (pathname.startsWith("/fly"))
+    return { page: "fly", entityId: null };
 
   return { page: "general", entityId: null };
 }
@@ -66,17 +77,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [agentExpanded, setAgentExpanded] = useState(false);
 
   const breadcrumb = deriveBreadcrumb(pathname);
+  const showWorkspaceSelectors = showAwsWorkspaceSelectors(pathname);
 
   const apiKeyConfigured =
     process.env.NEXT_PUBLIC_AGENT_ENABLED !== "false";
 
+  // agent sidebar collapsed width: 300px; expanded width: min(520px, 40vw)
   const agentWidth = agentExpanded ? "w-[min(520px,40vw)]" : "w-[300px]";
 
   return (
     <div className="flex h-screen flex-col bg-(--bg-deep)">
-      <Topbar items={breadcrumb} />
+      <Topbar
+        items={breadcrumb}
+        showWorkspaceSelectors={showWorkspaceSelectors}
+      />
 
       <div className="flex flex-1 overflow-hidden">
+        {/* sidebar nav width */}
         <aside className="w-[232px] shrink-0 border-r border-(--border-hairline) bg-(--bg-elevated)">
           <Sidebar secretsCount={secrets.length} />
         </aside>

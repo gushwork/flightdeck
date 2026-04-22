@@ -4,15 +4,23 @@ let pool: Pool | null = null;
 let tableEnsured = false;
 let pgAvailable = true;
 
+function databaseUrl(): string | null {
+  const url = process.env.DATABASE_URL?.trim();
+  return url ? url : null;
+}
+
 function createPool(): Pool {
   return new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: databaseUrl()!,
     connectionTimeoutMillis: 3000,
     max: 5,
   });
 }
 
-export async function getPool(): Promise<Pool> {
+/** Postgres-backed TTL cache is off when `DATABASE_URL` is unset or blank. */
+export async function getPool(): Promise<Pool | null> {
+  if (!databaseUrl()) return null;
+
   if (!pgAvailable) throw new Error('Postgres unavailable');
 
   if (!pool) {

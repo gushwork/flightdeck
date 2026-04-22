@@ -1,0 +1,96 @@
+---
+description: When planning large changes, always decompose into parallel agents with mutually exclusive tasks and precise per-agent instructions
+alwaysApply: true
+---
+
+# Parallel Agents for Large Changes
+
+When in plan mode and the scope involves 7+ files or multiple independent concerns, **always** decompose the work into parallel agent tasks before writing any code.
+
+## Step 1 — Decompose
+
+Identify independent work units. Each unit must satisfy:
+- Owns a disjoint set of files/directories — no file appears in two units
+- Has no runtime dependency on another unit's output during the same execution wave
+- Maps to a single layer or feature boundary (data, API, UI, navigation, config)
+
+Split axes to use: feature boundary · architectural layer · directory ownership
+
+## Step 2 — Write Precise Per-Agent Instructions
+
+For **each** agent, produce a block with all six fields:
+
+```
+### Agent <letter> — <one-line purpose>
+
+Goal:        <single sentence stating what this agent must achieve>
+Owns:        <exhaustive list of files and directories this agent may touch>
+Must not touch: <files owned by other agents that might be tempting>
+Inputs:      <interfaces, types, or constants it may consume from other agents (read-only)>
+Outputs:     <exported symbols, API routes, or UI components other agents depend on>
+Acceptance:  <concrete, verifiable done-condition — e.g. "GET /api/fly/apps returns {apps:[]}">
+```
+
+Every field is required. Vague goals ("implement the feature") are not acceptable.
+
+## Step 3 — Sequence Waves if Needed
+
+If any agent depends on an output from another, split into waves:
+
+```
+Wave 1 (parallel): Agent A, Agent B   — produce shared types/interfaces
+Wave 2 (parallel): Agent C, Agent D   — consume Wave 1 outputs, build logic
+Wave 3 (parallel): Agent E            — wires navigation, depends on Wave 2 routes
+```
+
+Agents within a wave run concurrently. Never start a wave until the previous wave is complete.
+
+## Step 4 — Present and Confirm
+
+Show the full plan (all agents with their six-field blocks + wave structure) to the user before launching. Do not begin implementation until the user approves.
+
+## Example
+
+```
+Large task: "Add Fly.io secrets management"
+
+### Agent A — Data + API layer
+
+Goal:        Implement Fly CLI wrapper and Next.js API routes for apps and secrets
+Owns:        lib/fly/cli.ts, lib/fly/types.ts, app/api/fly/apps/route.ts,
+             app/api/fly/apps/[app]/secrets/route.ts
+Must not touch: components/, app/fly/, lib/nav/
+Inputs:      none
+Outputs:     FlyApp, FlySecret types; GET /api/fly/apps; GET|POST /api/fly/apps/[app]/secrets
+Acceptance:  All four files exist; API routes return typed JSON without runtime errors
+
+### Agent B — UI layer
+
+Goal:        Build the Fly overview page and secrets bulk-edit panel
+Owns:        app/fly/overview/page.tsx, app/fly/secrets/page.tsx,
+             components/fly/fly-secrets-bulk-panel.tsx
+Must not touch: lib/fly/, app/api/, lib/nav/, components/layout/
+Inputs:      FlyApp, FlySecret types from Agent A (read-only import)
+Outputs:     /fly/overview and /fly/secrets pages renderable in the shell
+Acceptance:  Both pages compile; secrets panel lists and saves secrets via Agent A routes
+
+### Agent C — Navigation wiring
+
+Goal:        Add Fly entries to sidebar and topbar navigation
+Owns:        lib/nav/aws-workspace-topbar.ts, components/layout/sidebar.tsx
+Must not touch: lib/fly/, app/fly/, app/api/fly/, components/fly/
+Inputs:      Route paths /fly/overview and /fly/secrets from Agent B (string constants only)
+Outputs:     Sidebar group "Fly" with Overview and Secrets links visible in the shell
+Acceptance:  Sidebar renders Fly group; active link highlights on /fly/* routes
+
+Wave structure: Agent A and Agent B run in parallel (Wave 1).
+               Agent C runs after Wave 1 is complete (Wave 2).
+```
+
+## Anti-patterns
+
+- ❌ Omitting any of the six per-agent fields
+- ❌ Two agents with overlapping `Owns` lists
+- ❌ Starting Wave 2 before Wave 1 acceptance criteria are verified
+- ❌ One giant agent touching 10+ files sequentially
+- ❌ Launching agents before the user has reviewed and approved the plan

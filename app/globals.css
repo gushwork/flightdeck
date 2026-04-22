@@ -28,10 +28,16 @@
   --accent-muted: rgba(79, 70, 229, 0.09);
   --success: #15803d;
   --success-muted: rgba(21, 128, 61, 0.08);
+  /* --success-dim is an alias for --success-muted */
+  --success-dim: rgba(21, 128, 61, 0.08);
   --warn: #c2410c;
   --warn-muted: rgba(194, 65, 12, 0.08);
+  /* --warn-dim is an alias for --warn-muted */
+  --warn-dim: rgba(194, 65, 12, 0.08);
   --danger: #b91c1c;
   --danger-muted: rgba(185, 28, 28, 0.08);
+  /* --danger-dim is an alias for --danger-muted */
+  --danger-dim: rgba(185, 28, 28, 0.08);
 }
 
 body {

@@ -8,6 +8,7 @@ import { WorkflowDrawer } from "@/components/github/workflow-drawer";
 import { WorkflowBadgeImage } from "@/components/github/workflow-badge-image";
 import { WorkflowDispatchForm } from "@/components/github/workflow-dispatch-form";
 import { Skeleton } from "@/components/layout/loading-skeleton";
+import { SearchableSelect } from "@/components/searchable-select";
 import {
   StatusIcon,
   relativeTime,
@@ -65,7 +66,7 @@ function WorkflowCard({
         dispatchOpen ? "z-[100]" : "z-0"
       } ${
         focused
-          ? "border-(--accent)/50 bg-(--bg-elevated) shadow-md ring-2 ring-(--accent)/20"
+          ? "border-(--accent)/50 bg-(--bg-elevated) shadow-sm ring-2 ring-(--accent)/20"
           : "border-(--border-hairline) bg-(--bg-elevated) hover:border-(--border) hover:shadow-sm"
       }`}
     >
@@ -160,7 +161,7 @@ function WorkflowCard({
             )}
           </div>
           {isDisabled && (
-            <span className="shrink-0 rounded-full border border-(--warn)/20 bg-(--warn)/5 px-1.5 py-0.5 text-[10px] font-medium text-(--warn)">
+            <span className="shrink-0 rounded-full border border-(--border-hairline) bg-(--bg-muted) px-1.5 py-0.5 text-[10px] font-medium text-(--text-muted)">
               disabled
             </span>
           )}
@@ -338,17 +339,20 @@ export default function WorkflowsPage() {
         </div>
         <div className="flex items-center gap-2">
           {repos.length > 1 && (
-            <select
+            <SearchableSelect
               value={repoFilter}
-              onChange={(e) => setRepoFilter(e.target.value)}
+              onValueChange={setRepoFilter}
               className={selectClass}
               aria-label="Filter by repository"
-            >
-              <option value="">All repos ({repos.length})</option>
-              {repos.map((r) => (
-                <option key={r} value={r}>{r.split("/")[1] ?? r}</option>
-              ))}
-            </select>
+              searchPlaceholder="Search repos…"
+              options={[
+                { value: "", label: `All repos (${repos.length})` },
+                ...repos.map((r) => ({
+                  value: r,
+                  label: r.split("/")[1] ?? r,
+                })),
+              ]}
+            />
           )}
           <button
             type="button"
@@ -379,7 +383,7 @@ export default function WorkflowsPage() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-(--danger)/20 bg-(--danger)/5 px-4 py-3 text-sm text-(--danger)">
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-(--danger)/20 bg-(--danger)/5 px-4 py-3 text-sm text-(--danger)">
           <span>{error}</span>
           <button type="button" onClick={fetchWorkflows} className="shrink-0 underline">Retry</button>
         </div>

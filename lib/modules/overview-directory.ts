@@ -33,7 +33,7 @@ export interface DirectorySubsection {
 }
 
 export interface DirectoryGroup {
-  id: "aws" | "github";
+  id: "aws" | "github" | "fly";
   title: string;
   lead: string;
   subsections: DirectorySubsection[];
@@ -44,6 +44,9 @@ const AWS_LEAD =
 
 const GITHUB_LEAD =
   "Monitor and control GitHub Actions across repos with the GitHub CLI token from Settings.";
+
+const FLY_LEAD =
+  "Monitor Fly.io apps and manage secrets using the local flyctl CLI session.";
 
 /** Collapsible directory on the home page and data for service overviews. */
 export const DIRECTORY_GROUPS: DirectoryGroup[] = [
@@ -139,7 +142,7 @@ export const DIRECTORY_GROUPS: DirectoryGroup[] = [
         links: [
           {
             href: "/github/overview",
-            label: "Overview",
+            label: "GitHub",
             description: "What this app can do with GitHub Actions and where to configure access.",
             accent: "accent",
           },
@@ -159,6 +162,32 @@ export const DIRECTORY_GROUPS: DirectoryGroup[] = [
             href: "/github/workflows",
             label: "Workflows",
             description: "Browse workflows, enable or disable, and open dispatch where supported.",
+            accent: "accent",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "fly",
+    title: "Fly.io",
+    lead: FLY_LEAD,
+    subsections: [
+      {
+        id: "fly-hub",
+        title: "Fly.io",
+        accent: "success",
+        links: [
+          {
+            href: "/fly/overview",
+            label: "Fly.io",
+            description: "App health dashboard — machines, regions, and deployment status at a glance.",
+            accent: "success",
+          },
+          {
+            href: "/fly/secrets",
+            label: "Secrets",
+            description: "List, set, and remove encrypted runtime secrets for any Fly app.",
             accent: "accent",
           },
         ],
@@ -188,4 +217,26 @@ export function getGithubOverviewLinks(): DirectoryLink[] {
 export function getGithubOverviewLead(): string {
   const gh = DIRECTORY_GROUPS.find((g) => g.id === "github");
   return gh?.lead ?? GITHUB_LEAD;
+}
+
+/** Links for /fly/overview. Replaces the directory's Fly hub link to this page with Settings (same pattern as other overviews: no self-link). */
+export function getFlyOverviewLinks(): DirectoryLink[] {
+  const fly = DIRECTORY_GROUPS.find((g) => g.id === "fly");
+  const raw = fly?.subsections[0]?.links ?? [];
+  const withoutSelf = raw.filter((l) => l.href !== "/fly/overview");
+  if (withoutSelf.length === raw.length) return raw;
+  return [
+    {
+      href: "/settings",
+      label: "Settings",
+      description: "Workspace paths, tokens, and tooling preferences used with flyctl.",
+      accent: "accent",
+    },
+    ...withoutSelf,
+  ];
+}
+
+export function getFlyOverviewLead(): string {
+  const fly = DIRECTORY_GROUPS.find((g) => g.id === "fly");
+  return fly?.lead ?? FLY_LEAD;
 }

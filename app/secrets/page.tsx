@@ -55,6 +55,14 @@ function normalizeSecretTags(rows: { key: string; value: string }[]): Record<str
   return out;
 }
 
+function jsonObjectToStringRecord(obj: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === "string" ? v : JSON.stringify(v);
+  }
+  return out;
+}
+
 function CreateSecretModal({
   open,
   onClose,
@@ -177,8 +185,35 @@ function CreateSecretModal({
     const keys = Object.keys(parsed);
     if (keys.length === 0) return;
 
+    const current = value;
+    const currentTrim = current.trim();
+    let merged: Record<string, string>;
+
+    if (!currentTrim) {
+      merged = { ...parsed };
+    } else {
+      try {
+        const j = JSON.parse(currentTrim);
+        if (j !== null && typeof j === "object" && !Array.isArray(j)) {
+          merged = {
+            ...jsonObjectToStringRecord(j as Record<string, unknown>),
+            ...parsed,
+          };
+        } else {
+          return;
+        }
+      } catch {
+        const existingEnv = parseEnvFile(current);
+        if (Object.keys(existingEnv).length > 0) {
+          merged = { ...existingEnv, ...parsed };
+        } else {
+          return;
+        }
+      }
+    }
+
     e.preventDefault();
-    setValue(JSON.stringify(parsed, null, 2));
+    setValue(JSON.stringify(merged, null, 2));
     setEnvImportStatus(
       `Imported ${keys.length} variable${keys.length > 1 ? "s" : ""} from pasted .env content.`,
     );
@@ -186,8 +221,8 @@ function CreateSecretModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-lg border border-(--border) bg-(--bg-field) p-6 shadow-xl">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-xl border border-(--border) bg-(--bg-field) p-6 shadow-sm">
         <h3 className="text-base font-semibold text-(--text-primary)">
           Create Secret
         </h3>
@@ -474,7 +509,7 @@ export default function SecretsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="font-(family-name:--font-display) text-3xl text-(--text-primary)">
+      <h1 className="font-(family-name:--font-display) text-2xl font-medium text-(--text-primary)">
         Secrets
         <span className="ml-2 font-(family-name:--font-mono) text-base text-(--text-muted)">
           ({secrets.length})

@@ -10,6 +10,7 @@ import {
   serializeWorkflowDispatchInputs,
   validateWorkflowDispatchInputs,
 } from "@/lib/github/workflow-dispatch-client";
+import { SearchableSelect } from "@/components/searchable-select";
 
 // ─── Schema fetch ───────────────────────────────────────────────────────────────
 
@@ -81,24 +82,24 @@ function DispatchInputRow({
     : "w-full rounded-lg border border-(--border) bg-(--bg-field) px-3 py-2 text-sm text-(--text-primary) outline-none focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30 font-(family-name:--font-mono)";
 
   if (t === "choice" && spec.options && spec.options.length > 0) {
+    const choiceOptions = [
+      ...(!spec.required ? [{ value: "", label: "—" }] : []),
+      ...spec.options.map((o) => ({ value: o, label: o })),
+    ];
     return (
       <label className="block">
         <span className={labelClass}>
           {label}
           {spec.required && <span className="text-(--danger)"> *</span>}
         </span>
-        <select
+        <SearchableSelect
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onValueChange={onChange}
           className={fieldClass}
-        >
-          {!spec.required && <option value="">—</option>}
-          {spec.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          placeholder="—"
+          searchPlaceholder="Search…"
+          options={choiceOptions}
+        />
       </label>
     );
   }
@@ -111,10 +112,17 @@ function DispatchInputRow({
           {label}
           {spec.required && <span className="text-(--danger)"> *</span>}
         </span>
-        <select value={v} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
-          <option value="false">false</option>
-          <option value="true">true</option>
-        </select>
+        <SearchableSelect
+          value={v}
+          onValueChange={onChange}
+          className={fieldClass}
+          showSearch={false}
+          placeholder="false"
+          options={[
+            { value: "false", label: "false" },
+            { value: "true", label: "true" },
+          ]}
+        />
       </label>
     );
   }
@@ -263,7 +271,7 @@ export function WorkflowDispatchForm({
         <p className={compact ? "text-[11px] text-(--danger)" : "text-sm text-(--danger)"}>{loadError}</p>
       )}
       {schema && !schema.hasWorkflowDispatch && (
-        <p className="rounded border border-(--warn)/25 bg-(--warn)/5 px-2 py-1.5 text-[11px] text-(--warn)">
+        <p className="rounded-lg border border-(--warn)/25 bg-(--warn)/5 px-2 py-1.5 text-[11px] text-(--warn)">
           No <code className="font-(family-name:--font-mono)">workflow_dispatch</code> in this file’s{" "}
           <code className="font-(family-name:--font-mono)">on:</code> block. GitHub may reject a manual
           run.
@@ -289,7 +297,7 @@ export function WorkflowDispatchForm({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="shrink-0 rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
             >
               {submitLoading ? "…" : "Run"}
             </button>
@@ -328,8 +336,8 @@ export function WorkflowDispatchForm({
           disabled={!canSubmit}
           className={
             variant === "drawer"
-              ? "w-full rounded-lg bg-(--accent) px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-              : "w-full rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              ? "w-full rounded-lg bg-(--accent) px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              : "w-full rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
           }
         >
           {submitLoading ? (variant === "drawer" ? "Triggering…" : "…") : variant === "drawer" ? "Run workflow" : "Run"}

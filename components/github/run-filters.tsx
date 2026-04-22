@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchableSelect } from "@/components/searchable-select";
+
 interface RunFiltersProps {
   status: string;
   repo: string;
@@ -27,7 +29,10 @@ const statusOptions = [
 ];
 
 const selectClass =
-  "rounded-lg border border-(--border) bg-(--bg-field) px-2.5 py-1.5 text-xs text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30 min-w-0";
+  "shrink-0 rounded-lg border border-(--border) bg-(--bg-field) px-2.5 py-1.5 text-xs text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30 min-w-0";
+
+const branchInputClass =
+  "w-[7.5rem] shrink-0 rounded-lg border border-(--border) bg-(--bg-field) py-1.5 pl-7 pr-2.5 text-xs text-(--text-primary) font-(family-name:--font-mono) outline-none transition-colors placeholder:text-(--text-faint) placeholder:font-(family-name:--font-sans) focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30 sm:w-36";
 
 export function RunFilters({
   status,
@@ -46,61 +51,73 @@ export function RunFilters({
 }: RunFiltersProps) {
   const hasFilters = !!status || !!repo || !!workflow || !!branch;
 
+  const repoOptions = [
+    { value: "", label: "All repos" },
+    ...repos.map((r) => ({
+      value: r,
+      label: r.split("/")[1] ?? r,
+    })),
+  ];
+
+  const workflowOptions = [
+    { value: "", label: "All workflows" },
+    ...workflows.map((w) => ({ value: w, label: w })),
+  ];
+
+  const sortOptions = [
+    { value: "newest", label: "Newest first" },
+    { value: "oldest", label: "Oldest first" },
+  ];
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
+    <div
+      className="-mx-0.5 flex flex-nowrap items-center gap-2 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--border-subtle)"
+      role="toolbar"
+      aria-label="Run filters"
+    >
+      <SearchableSelect
         value={status}
-        onChange={(e) => onStatusChange(e.target.value)}
-        className={selectClass}
+        onValueChange={onStatusChange}
+        className={`${selectClass} min-w-[8.75rem] max-w-[12rem]`}
         aria-label="Filter by status"
-      >
-        {statusOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        searchPlaceholder="Search statuses…"
+        options={statusOptions}
+        shortcutFocusFirst
+        variant="panel"
+      />
 
       {repos.length > 0 && (
-        <select
+        <SearchableSelect
           value={repo}
-          onChange={(e) => onRepoChange(e.target.value)}
-          className={selectClass}
+          onValueChange={onRepoChange}
+          className={`${selectClass} min-w-[13rem] max-w-[20rem]`}
           aria-label="Filter by repository"
-        >
-          <option value="">All repos</option>
-          {repos.map((r) => (
-            <option key={r} value={r}>
-              {r.split("/")[1] ?? r}
-            </option>
-          ))}
-        </select>
+          searchPlaceholder="Search repos…"
+          options={repoOptions}
+          variant="panel"
+        />
       )}
 
       {workflows.length > 0 && (
-        <select
+        <SearchableSelect
           value={workflow}
-          onChange={(e) => onWorkflowChange(e.target.value)}
-          className={`${selectClass} max-w-[160px]`}
+          onValueChange={onWorkflowChange}
+          className={`${selectClass} min-w-[12rem] max-w-[18rem]`}
           aria-label="Filter by workflow"
-        >
-          <option value="">All workflows</option>
-          {workflows.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
+          searchPlaceholder="Search workflows…"
+          options={workflowOptions}
+          variant="panel"
+        />
       )}
 
-      <div className="relative">
+      <div className="relative shrink-0">
         <input
           ref={branchInputRef}
           type="text"
           value={branch}
           onChange={(e) => onBranchChange(e.target.value)}
           placeholder="Branch…"
-          className="rounded-lg border border-(--border) bg-(--bg-field) py-1.5 pl-7 pr-2.5 text-xs text-(--text-primary) font-(family-name:--font-mono) outline-none transition-colors placeholder:text-(--text-faint) placeholder:font-sans focus:border-(--accent) focus:ring-1 focus:ring-(--accent)/30"
+          className={branchInputClass}
           aria-label="Filter by branch"
         />
         <svg
@@ -115,15 +132,15 @@ export function RunFilters({
         </svg>
       </div>
 
-      <select
+      <SearchableSelect
         value={sort}
-        onChange={(e) => onSortChange(e.target.value as "newest" | "oldest")}
-        className={selectClass}
+        onValueChange={(v) => onSortChange(v as "newest" | "oldest")}
+        className={`${selectClass} min-w-[8.5rem] max-w-[11rem]`}
         aria-label="Sort order"
-      >
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
-      </select>
+        searchPlaceholder="Search…"
+        options={sortOptions}
+        variant="panel"
+      />
 
       {hasFilters && (
         <button
@@ -134,7 +151,7 @@ export function RunFilters({
             onWorkflowChange("");
             onBranchChange("");
           }}
-          className="rounded-lg border border-(--border) bg-(--bg-surface) px-2.5 py-1.5 text-xs text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-secondary)"
+          className="shrink-0 rounded-lg border border-(--border) bg-(--bg-surface) px-2.5 py-1.5 text-xs text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-secondary)"
         >
           Clear
         </button>

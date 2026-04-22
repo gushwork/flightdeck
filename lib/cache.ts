@@ -3,6 +3,7 @@ import { getPool } from './db';
 export async function getCached<T>(key: string): Promise<T | null> {
   try {
     const pool = await getPool();
+    if (!pool) return null;
     const { rows } = await pool.query(
       `SELECT data FROM cache WHERE key = $1 AND expires_at > now()`,
       [key],
@@ -20,6 +21,7 @@ export async function setCache<T>(
 ): Promise<void> {
   try {
     const pool = await getPool();
+    if (!pool) return;
     const interval = `${ttlMs} milliseconds`;
     await pool.query(
       `INSERT INTO cache (key, data, ttl_ms, created_at, expires_at)
@@ -36,6 +38,7 @@ export async function setCache<T>(
 export async function invalidateCache(prefix?: string): Promise<void> {
   try {
     const pool = await getPool();
+    if (!pool) return;
     if (!prefix) {
       await pool.query(`DELETE FROM cache`);
     } else {

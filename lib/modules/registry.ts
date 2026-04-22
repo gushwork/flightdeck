@@ -10,7 +10,8 @@ export type ModuleId =
   | "audit"
   | "settings"
   | "iam"
-  | "github";
+  | "github"
+  | "fly";
 
 export type NavIconId =
   | "dashboard"
@@ -28,6 +29,8 @@ export type NavIconId =
   | "playCircle"
   | "listRuns"
   | "gitBranch"
+  | "fly"
+  | "flySecrets"
   | "settings";
 
 /** Sub-links under a collapsible nav row (e.g. IAM utilities under Overview). */
@@ -57,13 +60,27 @@ export interface ModuleNavSection {
   footer?: boolean;
 }
 
+/** Sidebar grouping: optional collapsible AWS shell with hub link + nested modules. */
+export type SidebarServiceGroup =
+  | { moduleIds: ModuleId[] }
+  | {
+      collapsible: true;
+      headerModuleId: ModuleId;
+      moduleIds: ModuleId[];
+    };
+
 /**
- * Sidebar hierarchy: service tier (AWS, GitHub) first; module items nest under each.
- * Order within `moduleIds` is top-to-bottom under that service.
+ * Sidebar hierarchy: grouped sections with vertical rhythm; order is top-to-bottom.
+ * AWS is wrapped in a collapsible row (`headerModuleId` hub link + nested `moduleIds`).
  */
-export const SIDEBAR_SERVICE_GROUPS: { title: string; moduleIds: ModuleId[] }[] = [
-  { title: "AWS", moduleIds: ["platforms", "secrets", "amplify", "audit", "iam"] },
-  { title: "GitHub", moduleIds: ["github"] },
+export const SIDEBAR_SERVICE_GROUPS: SidebarServiceGroup[] = [
+  {
+    collapsible: true,
+    headerModuleId: "platforms",
+    moduleIds: ["secrets", "amplify", "audit", "iam"],
+  },
+  { moduleIds: ["github"] },
+  { moduleIds: ["fly"] },
 ];
 
 export const MODULE_NAV: ModuleNavSection[] = [
@@ -71,7 +88,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
     id: "platforms",
     enabled: true,
     sectionLabel: "",
-    items: [{ href: "/aws", label: "Overview", icon: "aws" }],
+    items: [{ href: "/aws", label: "AWS", icon: "aws" }],
   },
   {
     id: "secrets",
@@ -138,12 +155,27 @@ export const MODULE_NAV: ModuleNavSection[] = [
     items: [
       {
         href: "/github/overview",
-        label: "Overview",
+        label: "GitHub",
         icon: "github",
         children: [
           { href: "/github", label: "Actions", icon: "playCircle" },
           { href: "/github/runs", label: "All runs", icon: "listRuns" },
           { href: "/github/workflows", label: "Workflows", icon: "gitBranch" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "fly",
+    enabled: true,
+    sectionLabel: "",
+    items: [
+      {
+        href: "/fly/overview",
+        label: "Fly.io",
+        icon: "fly",
+        children: [
+          { href: "/fly/secrets", label: "Secrets", icon: "flySecrets" },
         ],
       },
     ],
@@ -177,6 +209,7 @@ const MODULE_AGENT_TOOLS: Record<ModuleId, AgentToolGroup[]> = {
   settings: [],
   iam: [],
   github: [],
+  fly: [],
 };
 
 export function getEnabledAgentToolGroups(): Set<AgentToolGroup> {

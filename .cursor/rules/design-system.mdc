@@ -1,0 +1,338 @@
+---
+description: Flightdeck design tokens (globals.css), Tailwind v4 patterns, GitHub Actions UI, sidebar/mutation UX, accessibility — grounded in app/globals.css
+globs:
+  - app/**/*.tsx
+  - app/**/*.css
+  - components/**/*.tsx
+alwaysApply: false
+---
+
+# Flightdeck design system
+
+Use this rule whenever you edit UI, styling, layout, or interaction patterns in this repo (`app/`, `components/`, `app/globals.css`).
+
+## Mission
+
+Implementation-ready guidance grounded in this project’s tokens, fonts, and established patterns. A short operator-facing recap lives at **`/design-system`** (`app/design-system/page.tsx`).
+
+## Brand — Flightdeck
+
+Single-pane ops console covering AWS and GitHub. Apple-inspired: calm when healthy, urgent only when something needs attention. Sophisticated, not flashy. Information-dense without feeling crowded.
+
+## Actual token system (globals.css + Tailwind v4)
+
+### CSS custom properties on `:root`
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `--bg-deep` | `#fafafa` | Page / main background |
+| `--bg-elevated` | `#ffffff` | Sidebar, panels, cards |
+| `--bg-field` | `#ffffff` | Form fields, tables, data panels |
+| `--bg-surface` | `#ffffff` | Hover state for cards |
+| `--bg-muted` | `#ececea` | Skeleton pulse, muted backgrounds |
+| `--bg-hover` | `#f3f4f6` | Hover states on interactive rows |
+| `--border` | `#e2e2de` | Standard borders |
+| `--border-subtle` | `#eaeae8` | Lighter borders |
+| `--border-hairline` | `#e8e8e5` | Thinnest borders (card outlines, dividers) |
+| `--text-primary` | `#1c1917` | Primary text |
+| `--text-secondary` | `#57534e` | Secondary labels |
+| `--text-muted` | `#78716c` | Muted metadata |
+| `--text-faint` | `#a8a29e` | Faintest captions |
+| `--accent` | `#4f46e5` | Indigo — primary interactive, active nav |
+| `--accent-dim` | `rgba(79,70,229,0.1)` | Light accent fill (badges, count chips) |
+| `--accent-muted` | `rgba(79,70,229,0.09)` | Active nav background |
+| `--success` | `#15803d` | Green — success status |
+| `--warn` | `#c2410c` | Orange — warning, queued state |
+| `--danger` | `#b91c1c` | Red — error, failed state |
+| `--bg-card` | `#ffffff` | Alias for `--bg-elevated`; use `--bg-elevated` in new code |
+| `--success-muted` | `rgba(21,128,61,0.08)` | Light success fill (badges, status chips) |
+| `--success-dim` | `rgba(21,128,61,0.08)` | Alias for `--success-muted` |
+| `--warn-muted` | `rgba(194,65,12,0.08)` | Light warning fill |
+| `--warn-dim` | `rgba(194,65,12,0.08)` | Alias for `--warn-muted` |
+| `--danger-muted` | `rgba(185,28,28,0.08)` | Light danger fill |
+| `--danger-dim` | `rgba(185,28,28,0.08)` | Alias for `--danger-muted` |
+
+### Tailwind v4 usage
+
+Always reference tokens via `bg-(--token)`, `text-(--token)`, `border-(--token)`. **Do not hardcode hex in components** — use CSS variables / tokens. Tailwind v4 shorthand `font-mono` is equivalent to `font-(family-name:--font-mono)`; **match whichever form the file already uses**.
+
+## Fonts (next/font/google)
+
+| Variable | Font | Use |
+|----------|------|-----|
+| `--font-display` / `font-(family-name:--font-display)` | **Fraunces** | Page headings, dashboard titles |
+| `--font-sans` / default body | **DM Sans** | Body text, labels, buttons |
+| `--font-mono` / `font-(family-name:--font-mono)` | **IBM Plex Mono** | Numbers (tabular-nums), SHAs, durations, mono values |
+
+Numeric metric values must use `font-(family-name:--font-mono) tabular-nums`. Page h1s use `font-(family-name:--font-display)`. Other copy is DM Sans (default).
+
+## Spacing scale
+
+Use Tailwind’s standard scale anchored at 4px. Cadence: `gap-2` inside cards, `gap-4` between cards, `px-5 py-4` stat cards, `px-3 py-2.5` compact list rows, `px-8 py-8` main content area.
+
+## Border radius tier
+
+| Class | Use |
+|-------|-----|
+| `rounded` (4px) | Bare inline elements only (e.g. code pill inside a sentence) |
+| `rounded-md` (6px) | Avoid — not in the tier; migrate to `rounded-lg` |
+| `rounded-lg` (8px) | Buttons, tooltips, badges, error banners, warning notices |
+| `rounded-xl` (12px) | Cards, modals, panels, stat cards, dialogs — the default container radius |
+| `rounded-2xl` (16px) | Prohibited in new code; reserved only for marketing-style hero sections |
+| `rounded-full` | Icon-only avatar/chip shapes only; not for action buttons |
+
+## Shadow tier
+
+| Class | Use |
+|-------|-----|
+| `shadow-sm` | Stat cards, modals, elevated cards — the standard card shadow |
+| `shadow-md` | Floating panels (dropdowns, popovers, command menus) |
+| `shadow-lg` | Toasts, global overlays |
+| `shadow-xl` | Prohibited on cards and modals; only acceptable on full-screen drawers |
+
+Never apply Tailwind's raw shadow scale to a component without consulting this table.
+
+## Focus rings (accessibility requirement)
+
+Every interactive element (input, textarea, select, button, [role="option"], combobox) **must** have a visible focus ring:
+
+```
+focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20
+```
+
+- `ring-2` not `ring-1` — the thinner ring fails WCAG 2.2 AA contrast
+- `/20` opacity on `--accent`, not `/30`
+- Never suppress focus rings with `outline-none` alone
+
+## Established component patterns
+
+### Stat card
+
+```
+rounded-xl border border-(--border-hairline) bg-(--bg-elevated) px-5 py-4 shadow-sm
+  — metric: font-(family-name:--font-mono) text-3xl font-light tabular-nums
+  — label: text-xs font-medium text-(--text-secondary)
+  — sub: text-[11px] text-(--text-faint)
+```
+
+### Feature / link card (IAM-style)
+
+```
+rounded-xl border border-(--border) bg-(--bg-field) p-5
+  hover: border-(--accent)/40 bg-(--bg-surface)
+  — use `group` + `group-hover:text-(--accent)` on title
+```
+
+### Data list row
+
+```
+flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
+  default: hover:bg-(--bg-hover)
+  focused: bg-(--accent-muted)
+```
+
+### Run card (GitHub Actions)
+
+```
+rounded-xl border border-(--border-hairline) bg-(--bg-elevated) p-4
+  focused: border-(--accent)/50 ring-2 ring-(--accent)/20 shadow-md
+  hover: border-(--border) shadow-sm
+```
+
+### Action button variants
+
+| Variant | Class pattern |
+|---------|---------------|
+| Primary | `bg-(--accent) text-white hover:opacity-90` |
+| Default | `border border-(--border) bg-(--bg-surface) text-(--text-secondary) hover:border-(--accent)/50 hover:text-(--accent)` |
+| Danger | `border border-(--danger)/20 bg-(--danger)/5 text-(--danger) hover:bg-(--danger)/10` |
+| Ghost | `border-transparent text-(--text-muted) hover:bg-(--bg-hover)` |
+
+### Skeleton loading
+
+```
+animate-pulse rounded bg-(--bg-muted)
+```
+
+Skeletons must appear instantly (under 50ms perceived) — render during initial load rather than showing nothing.
+
+### Status indicators (GitHub Actions)
+
+| State | Color token | Visual |
+|-------|-------------|--------|
+| in_progress | `--accent` | Spinning SVG circle |
+| queued / waiting | `--warn` | Clock SVG |
+| success | `--success` | Filled circle + check |
+| failure / timed_out | `--danger` | Circle + X |
+| cancelled | `--text-muted` | Circle + dash |
+| skipped | `--text-faint` | Dashed circle + arrow |
+
+### Pulsing activity dot
+
+```html
+<span class="relative flex h-2 w-2">
+  <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-(--accent) opacity-60" />
+  <span class="relative inline-flex h-2 w-2 rounded-full bg-(--accent)" />
+</span>
+```
+
+Use for **live** activity (e.g. in-progress runs in sidebar). Never for static state.
+
+### Health / progress bar
+
+```
+h-1.5 overflow-hidden rounded-full bg-(--bg-muted)
+  inner: h-full rounded-full transition-all duration-500
+  — green ≥90%: var(--success) | amber 70–89%: var(--warn) | red under 70%: var(--danger)
+```
+
+### Empty state
+
+Center-aligned, 40px SVG in `text-(--text-faint)`, `text-sm font-medium text-(--text-secondary)` title, `text-xs text-(--text-muted)` description. No borders or cards around empty states.
+
+### Keyboard hint strip
+
+```
+rounded-xl border border-(--border-hairline) bg-(--bg-elevated) px-5 py-3
+  <kbd>: rounded border border-(--border) px-1 py-0.5 font-(family-name:--font-mono) text-[10px]
+```
+
+## UX principles
+
+1. **Instant perceived speed** — Skeleton cards in under 50ms; never a blank screen.
+2. **Quiet when calm** — Urgency only when something needs attention.
+3. **Keyboard-first** — `:focus-visible` ring using `--accent`; arrow-key grids where appropriate.
+4. **Progressive disclosure** — Summary → grid → detail.
+5. **Optimistic mutations** — Update UI immediately; revert on error.
+6. **Smart defaults** — in-progress before failures before settled (priority order).
+
+### Modal / dialog backdrop
+
+`bg-black/40` — always use this exact opacity. `/25` and `/30` are too light; they fail to visually separate the modal from complex backgrounds.
+
+## Smart polling (GitHub data)
+
+| Condition | Interval |
+|-----------|----------|
+| Any run in_progress or queued | 8s |
+| Recent failure (last 2 min) | 15s |
+| All settled | 60s |
+| Tab not focused | Pause (resume on visibilitychange) |
+| After mutation | Immediate + 5s follow-up |
+
+Preload GitHub data at shell level; skeletons until first response; cap server fan-out.
+
+## Sticky filter bar (dense views)
+
+```
+sticky top-0 z-10 -mx-8 bg-(--bg-deep)/90 px-8 py-3 backdrop-blur-sm border-b border-(--border-hairline)
+```
+
+Pair with URL-synced filters (`useSearchParams`) for shareable views.
+
+## Event badge (workflow trigger)
+
+```
+inline-flex rounded-full border border-(--border-subtle) bg-(--bg-muted) px-1.5 py-0.5 font-(family-name:--font-mono) text-[10px] text-(--text-muted)
+```
+
+## Active run row — indeterminate progress
+
+Sliding inner bar on `bg-(--bg-muted)` track; pair with live elapsed time, not static text.
+
+## Mutation UX
+
+- **Optimistic** — update immediately; revert on API error.
+- **Destructive** — shared `ConfirmDialog`; loading on confirm.
+
+## Server / client boundary
+
+Never import `lib/github/client.ts` or `lib/aws/*` from `"use client"` components. UI uses `/api/*` routes. Pure helpers/types in `lib/github/types.ts` (or similar) are fine.
+
+## Sidebar navigation
+
+**Human-readable overview:** [`/design-system`](../../app/design-system/page.tsx) in the app. **Authoritative detail for implementers** stays in this rule file.
+
+### Structure and registry
+
+- Nav order and modules come from [`lib/modules/registry.ts`](../../lib/modules/registry.ts): `MODULE_NAV`, `SIDEBAR_SERVICE_GROUPS`, optional `SidebarServiceGroup.collapsible` for the AWS shell (hub `headerModuleId` + nested `moduleIds`).
+- Do not duplicate link lists in [`components/layout/sidebar.tsx`](../../components/layout/sidebar.tsx) except **icons** and layout specific to the sidebar.
+
+### Visual hierarchy (current product)
+
+- **No** duplicate ALL CAPS tier labels above each block (removed).
+- **No** left hairline stripe beside groups (removed).
+- Spacing between blocks: `mt-4` after Dashboard / first control row, `mt-6` between major sections.
+
+### Hub rows — service names and vendor marks
+
+- Replace generic “Overview” labels with the **service name** (e.g. AWS hub, GitHub, Fly.io). Collapsible parents use **brand marks** where applicable (Simple Icons paths): **AWS** wordmark fill `#232F3E`, **GitHub** Octocat `fill="currentColor"`, **Fly.io** fill `#7B36F6`. These are **exceptions** to “no raw hex in UI” — reserved for vendor logos only; everything else uses tokens.
+
+### Collapsible AWS section
+
+- First `SIDEBAR_SERVICE_GROUPS` entry uses `collapsible: true`, `headerModuleId: "platforms"` (AWS hub → `/aws`), body `moduleIds`: secrets, amplify, audit, iam.
+- Expansion state key for the shell: stable string `aws-section` (not the `/aws` URL).
+
+### Expand all / Collapse all
+
+- Row **at the top of the nav** (above Dashboard): two equal-width controls.
+
+```
+flex gap-2
+  button: flex-1 min-w-0 rounded-lg border border-(--border-hairline) bg-(--bg-elevated)
+    px-2 py-1.5 text-center text-[11px] font-medium text-(--text-secondary)
+    hover:bg-(--bg-hover) hover:text-(--text-primary)
+```
+
+- Labels: “Expand all” / “Collapse all”.
+- Centralized expansion map: `aws-section` plus every collapsible parent **`href`** from `MODULE_NAV` items that define `children` (derived via `listCollapsibleNavParents()`).
+- **Expand all** sets every key `true`; **Collapse all** sets every key `false`.
+- **Route-driven auto-expand:** when `pathname` matches a section (AWS subtree, secrets, amplify, iam, github, fly, etc.), merge **open** for that key so deep links stay usable (sidebar applies sync in an animation frame after navigation).
+
+### Nav row and chevron (shared pattern)
+
+```
+flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors
+active: bg-(--accent-muted) text-(--accent) font-medium
+inactive: text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)
+```
+
+- Nested children under a collapsible: `ml-2.5 pl-2.5` (indent only; no border).
+- Chevron button: `w-8 shrink-0`, chevron SVG `14×14`, rotate `-rotate-90` when collapsed.
+
+### Sidebar — activity without noise
+
+Pulsing activity dot ([pattern above](#pulsing-activity-dot)) only when there is **live** GitHub Actions background work (`/github` row); hide when idle.
+
+## Typography scale
+
+| Element | Size | Weight | Font |
+|---------|------|--------|------|
+| Page h1 | `text-2xl` | `font-medium` | display |
+| Section h2 | `text-sm` | `font-semibold` | sans |
+| Card title | `text-[13px]` | `font-medium` | sans |
+| Body / label | `text-sm` | regular | sans |
+| Secondary | `text-xs` | regular | sans |
+| Caption / meta | `text-[11px]` | regular | sans |
+| Faintest | `text-[10px]` | regular | sans or mono |
+| Numeric metric | `text-3xl` | `font-light` | mono |
+| Compact numeric | `text-xs` | regular | mono + tabular-nums |
+
+## Accessibility
+
+WCAG 2.2 AA. Visible `:focus-visible` rings (`ring-2 ring-(--accent)/20`). Never rely on color alone — pair with icon or label. Status SVGs need `aria-label`.
+
+## Anti-patterns
+
+- No hardcoded hex in UI code — use `--token`, except **vendor logo fills** in the sidebar brand marks (AWS / Fly.io — see [Sidebar navigation](#sidebar-navigation)).
+- No decorative color — pulsing/danger/warn for real state only.
+- Empty “all clear” is success, not error.
+- No spinners for initial skeleton — use `animate-pulse`.
+- Status color always has accessible label.
+- `--success` as a primary action color — `--success` is a status/state color (green = healthy). Primary interactive actions always use `--accent`. Use `bg-(--success)` only for success badges, status dots, and health indicators.
+- `text-3xl` on page `h1` — page headings are `text-2xl font-medium font-(family-name:--font-display)`. `text-3xl` is oversized.
+- `bg-(--bg-field)` on modals and sidebars — `--bg-field` is for form fields and table backgrounds. Modal containers, sidebars, popovers, and header chrome use `--bg-elevated`.
+- `rounded-2xl` on standard cards — use `rounded-xl`. `rounded-2xl` is reserved for hero/marketing sections only.
+- Non-scale font sizes (`text-[1.05rem]`, `text-[0.9rem]`, etc.) — only use Tailwind’s named scale (`text-xs`, `text-sm`, `text-base`, etc.) or the explicitly documented arbitrary sizes (`text-[13px]`, `text-[11px]`, `text-[10px]`).
+- `rounded-md` on buttons — buttons use `rounded-lg`.
+- `bg-black/25` or `bg-black/30` as modal scrim — use `bg-black/40`.

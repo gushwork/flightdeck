@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
 import { OverwriteCopyDialog } from "@/components/iam/overwrite-copy-dialog";
+import { SearchableSelect } from "@/components/searchable-select";
 import type { IamEntityType, IamSearchHit } from "@/lib/aws/iam";
 
 const selectClass =
@@ -291,7 +292,7 @@ export default function IamCrossAccountCopyPage() {
         copying users does not move passwords, MFA, or access keys.
       </p>
 
-      <div className="mt-6 rounded-lg border border-(--border-hairline) bg-(--bg-field) px-4 py-3 text-xs text-(--text-secondary)">
+      <div className="mt-6 rounded-xl border border-(--border-hairline) bg-(--bg-field) px-4 py-3 text-xs text-(--text-secondary)">
         <span className="font-medium text-(--text-primary)">Source: </span>
         {profile.trim() ? profile : "Default credential chain"}
         {sourceAccountId ? (
@@ -372,7 +373,7 @@ export default function IamCrossAccountCopyPage() {
 
       <div className="mt-6">
         <h2 className="text-sm font-semibold text-(--text-primary)">Results</h2>
-        <ul className="mt-2 max-h-64 divide-y divide-(--border-hairline) overflow-y-auto rounded-lg border border-(--border-hairline) bg-(--bg-field)">
+        <ul className="mt-2 max-h-64 divide-y divide-(--border-hairline) overflow-y-auto rounded-xl border border-(--border-hairline) bg-(--bg-field)">
           {results.length === 0 && debouncedQuery.trim() && !searching ? (
             <li className="px-3 py-4 text-sm text-(--text-muted)">
               No matches.
@@ -454,19 +455,21 @@ export default function IamCrossAccountCopyPage() {
             select a target account.
           </p>
         ) : (
-          <select
+          <SearchableSelect
             id="iam-copy-target"
             value={targetProfile}
-            onChange={(e) => setTargetProfile(e.target.value)}
+            onValueChange={setTargetProfile}
             className={selectClass}
-          >
-            <option value="">Select target profile…</option>
-            {namedProfiles.map((o) => (
-              <option key={o.value} value={o.value}>
-                {targetLabel(o.value)}
-              </option>
-            ))}
-          </select>
+            placeholder="Select target profile…"
+            searchPlaceholder="Search profiles…"
+            options={[
+              { value: "", label: "Select target profile…" },
+              ...namedProfiles.map((o) => ({
+                value: o.value,
+                label: targetLabel(o.value),
+              })),
+            ]}
+          />
         )}
       </div>
 

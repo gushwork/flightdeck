@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type SecretOriginalKind,
   draftFromMode,
@@ -27,8 +27,12 @@ export function SecretValueEditor({
   const [kvRows, setKvRows] = useState<{ key: string; value: string }[]>([]);
   const [jsonText, setJsonText] = useState("");
   const [envText, setEnvText] = useState("");
+  /** Bumps when `secretString` loads so JSON/.env textareas remount with fresh `defaultValue`. */
+  const [textAreaKey, setTextAreaKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const jsonTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const envTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const d = stringToEditorDrafts(secretString);
@@ -38,7 +42,22 @@ export function SecretValueEditor({
     setOriginalKind(d.originalKind);
     setMode("kv");
     setError(null);
+    setTextAreaKey((k) => k + 1);
   }, [secretString]);
+
+  function liveJsonText(): string {
+    if (mode === "json" && jsonTextareaRef.current) {
+      return jsonTextareaRef.current.value;
+    }
+    return jsonText;
+  }
+
+  function liveEnvText(): string {
+    if (mode === "env" && envTextareaRef.current) {
+      return envTextareaRef.current.value;
+    }
+    return envText;
+  }
 
   function applyDraftsFromString(s: string) {
     const d = stringToEditorDrafts(s);
@@ -51,7 +70,13 @@ export function SecretValueEditor({
   function switchMode(next: EditMode) {
     if (next === mode) return;
     try {
-      const s = draftFromMode(mode, kvRows, jsonText, envText, originalKind);
+      const s = draftFromMode(
+        mode,
+        kvRows,
+        liveJsonText(),
+        liveEnvText(),
+        originalKind,
+      );
       applyDraftsFromString(s);
       setMode(next);
       setError(null);
@@ -90,10 +115,16 @@ export function SecretValueEditor({
         /* may be .env */
       }
     }
-    const parsed = parseEnvFile(text);
-    if (Object.keys(parsed).length === 0) return;
+    const pasted = parseEnvFile(text);
+    if (Object.keys(pasted).length === 0) return;
     e.preventDefault();
-    setEnvText(serializeEnvFile(parsed));
+    const existing = parseEnvFile(liveEnvText());
+    const merged = { ...existing, ...pasted };
+    const next = serializeEnvFile(merged);
+    setEnvText(next);
+    if (envTextareaRef.current) {
+      envTextareaRef.current.value = next;
+    }
     setError(null);
   }
 
@@ -102,7 +133,13 @@ export function SecretValueEditor({
     setError(null);
     let next: string;
     try {
-      next = draftFromMode(mode, kvRows, jsonText, envText, originalKind);
+      next = draftFromMode(
+        mode,
+        kvRows,
+        liveJsonText(),
+        liveEnvText(),
+        originalKind,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid value");
       return;
@@ -171,14 +208,14 @@ export function SecretValueEditor({
                   value={row.key}
                   onChange={(e) => updateKvRow(index, "key", e.target.value)}
                   placeholder="Key"
-                  className="min-w-0 flex-1 rounded-md border border-(--border) bg-(--bg-surface) px-2 py-1.5 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus:outline-none"
+                  className="min-w-0 flex-1 rounded-md border border-(--border) bg-(--bg-field) px-2 py-1.5 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
                 />
                 <input
                   type="text"
                   value={row.value}
                   onChange={(e) => updateKvRow(index, "value", e.target.value)}
                   placeholder="Value"
-                  className="min-w-0 flex-2 rounded-md border border-(--border) bg-(--bg-surface) px-2 py-1.5 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus:outline-none"
+                  className="min-w-0 flex-2 rounded-md border border-(--border) bg-(--bg-field) px-2 py-1.5 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
                 />
                 <button
                   type="button"
@@ -198,11 +235,13 @@ export function SecretValueEditor({
       {mode === "json" && (
         <div>
           <textarea
-            value={jsonText}
-            onChange={(e) => setJsonText(e.target.value)}
+            key={`json-${textAreaKey}`}
+            ref={jsonTextareaRef}
+            defaultValue={jsonText}
+            onInput={(e) => setJsonText(e.currentTarget.value)}
             rows={14}
             spellCheck={false}
-            className="w-full rounded-md border border-(--border) bg-(--bg-surface) px-3 py-2 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus:outline-none"
+            className="w-full rounded-md border border-(--border) bg-(--bg-field) px-3 py-2 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
             placeholder='JSON object, e.g. {"KEY":"value"} — or raw text'
           />
           <p className="mt-1 text-[11px] text-(--text-muted)">
@@ -214,12 +253,14 @@ export function SecretValueEditor({
       {mode === "env" && (
         <div>
           <textarea
-            value={envText}
-            onChange={(e) => setEnvText(e.target.value)}
+            key={`env-${textAreaKey}`}
+            ref={envTextareaRef}
+            defaultValue={envText}
+            onInput={(e) => setEnvText(e.currentTarget.value)}
             onPaste={handleEnvPaste}
             rows={14}
             spellCheck={false}
-            className="w-full rounded-md border border-(--border) bg-(--bg-surface) px-3 py-2 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus:outline-none"
+            className="w-full rounded-md border border-(--border) bg-(--bg-field) px-3 py-2 font-(family-name:--font-mono) text-xs text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
             placeholder={"KEY=value\nOTHER=\"quoted value\""}
           />
           <p className="mt-1 text-[11px] text-(--text-muted)">

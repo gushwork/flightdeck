@@ -1,0 +1,75 @@
+---
+description: Quick-fail list of the most commonly violated design patterns in this codebase — checked on every UI edit
+globs:
+  - app/**/*.tsx
+  - app/**/*.css
+  - components/**/*.tsx
+alwaysApply: true
+---
+
+# Design anti-patterns — do not introduce these
+
+This rule fires on every edit to `app/` and `components/`. Check each item before saving.
+
+## 🚫 Undefined / ghost tokens — NEVER USE
+
+These tokens do NOT exist in `globals.css` and will silently resolve to transparent:
+
+- ~~`--bg-card-elevated`~~ — use `--bg-elevated`
+- ~~`--text-on-accent`~~ — use `text-white` on `--accent` backgrounds
+- ~~`--border-focus`~~ — use `ring-(--accent)/20`
+
+The `-dim` and `-muted` aliases are now both defined. Prefer `-muted` in new code; `-dim` is kept for backward compatibility.
+
+## 🚫 Color anti-patterns
+
+```
+❌ bg-[#4f46e5]                    ✅ bg-(--accent)
+❌ style={{ color: "#b91c1c" }}    ✅ className="text-(--danger)"
+❌ bg-[rgba(79,70,229,0.1)]        ✅ bg-(--accent-dim)
+❌ bg-black/25  (modal scrim)      ✅ bg-black/40
+❌ bg-black/30  (modal scrim)      ✅ bg-black/40
+```
+
+Exception for vendor logos in sidebar only: `AWS #232F3E`, `Fly.io #7B36F6`.
+
+## 🚫 Typography anti-patterns
+
+```
+❌ <h1 className="text-3xl ...">    ✅ text-2xl font-medium font-(family-name:--font-display)
+❌ <h2 className="text-base ...">   ✅ text-sm font-semibold
+❌ text-[1.05rem]                   ✅ use named scale or text-sm/text-base
+❌ font-sans (raw Tailwind)         ✅ font-(family-name:--font-sans)
+❌ font-mono (raw Tailwind)         ✅ font-(family-name:--font-mono)
+```
+
+## 🚫 Component structure anti-patterns
+
+```
+❌ rounded-2xl on cards             ✅ rounded-xl
+❌ rounded-md on buttons            ✅ rounded-lg
+❌ rounded-full on action buttons   ✅ rounded-lg
+❌ shadow-xl on cards/modals        ✅ shadow-sm
+❌ bg-(--bg-field) on modal/header  ✅ bg-(--bg-elevated)
+❌ bg-(--bg-surface) on inputs      ✅ bg-(--bg-field)
+```
+
+## 🚫 Interaction / state anti-patterns
+
+```
+❌ bg-(--success) as primary CTA    ✅ bg-(--accent) text-white hover:opacity-90
+❌ bg-(--danger) as primary CTA     ✅ only for destructive confirm buttons
+❌ bg-(--warn) for disabled state   ✅ bg-(--bg-muted) text-(--text-muted)
+❌ hover:bg-(--accent)/90           ✅ hover:opacity-90 (on bg-(--accent) buttons)
+❌ ring-1 on inputs                 ✅ focus-visible:ring-2 focus-visible:ring-(--accent)/20
+❌ outline-none alone               ✅ focus-visible:outline-none focus-visible:ring-2 ...
+```
+
+## 🚫 Spacing anti-patterns
+
+```
+❌ px-6 on topbar/header            ✅ px-8 to align with main content
+❌ gap-4 sm:gap-5 (responsive gap)  ✅ gap-4 (single scale value)
+❌ p-5 on run cards                 ✅ p-4
+❌ px-5 py-4 on regular cards       ✅ p-4 for run cards; px-5 py-4 for stat cards only
+```
