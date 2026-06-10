@@ -1,22 +1,25 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import type { GHWorkflowRun, GHRunsSummary } from "@/lib/github/types";
-import { computeSummary } from "@/lib/github/types";
+import {
+  clearGithubDataError,
+  getGithubDataServerSnapshot,
+  getGithubDataSnapshot,
+  githubDataOptimisticUpdate,
+  replaceGithubDataSuccess,
+  setGithubDataFetchError,
+  setGithubDataLoading,
+  subscribeGithubData,
+} from "@/lib/github/github-data-store";
 
-// ─── Polling intervals ────────────────────────────────────────────────────────
+// ─── Polling intervals (only while /github/* is active) ─────────────────────
 
-const POLL_ACTIVE_MS = 8_000;   // in_progress or queued: 8 s — feels live
-const POLL_RECENT_FAIL_MS = 15_000; // recent failure within 2 min: 15 s
-const POLL_IDLE_MS = 60_000;    // all settled: 60 s — save bandwidth
-const POLL_AFTER_MUTATION_MS = 5_000; // follow-up after user action: 5 s
+const POLL_ACTIVE_MS = 8_000;
+const POLL_RECENT_FAIL_MS = 15_000;
+const POLL_IDLE_MS = 60_000;
+const POLL_AFTER_MUTATION_MS = 5_000;
 
 function computePollInterval(runs: GHWorkflowRun[]): number {
   const hasActive = runs.some(
@@ -42,7 +45,7 @@ function computePollInterval(runs: GHWorkflowRun[]): number {
   return POLL_IDLE_MS;
 }
 
-// ─── Context types ────────────────────────────────────────────────────────────
+// ─── Context types (stable return shape) ────────────────────────────────────
 
 export interface GithubDataContextValue {
   runs: GHWorkflowRun[];
@@ -60,7 +63,7 @@ export interface GithubDataContextValue {
   optimisticUpdate: (runId: number, patch: Partial<GHWorkflowRun>) => void;
 }
 
-const defaultSummary: GHRunsSummary = {
+const defaultSummary: GithubDataContextValue["summary"] = {
   total: 0,
   inProgress: 0,
   queued: 0,
@@ -71,153 +74,191 @@ const defaultSummary: GHRunsSummary = {
   failureRate: 0,
 };
 
-const GithubDataContext = createContext<GithubDataContextValue | null>(null);
+/** Filled by `GithubDataController` so `useGithubData` always has live handlers. */
+const controllerActions: {
+  refresh: () => Promise<void>;
+  notifyMutation: () => void;
+} = {
+  refresh: async () => {},
+  notifyMutation: () => {},
+};
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
+function GithubDataController() {
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
-export function GithubDataProvider({ children }: { children: React.ReactNode }) {
-  const [runs, setRuns] = useState<GHWorkflowRun[]>([]);
-  const [summary, setSummary] = useState<GHRunsSummary>(defaultSummary);
-  const [repos, setRepos] = useState<string[]>([]);
-  const [workflows, setWorkflows] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-
-  const runsRef = useRef<GHWorkflowRun[]>([]);
   const loadingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Set to true for one cycle after a mutation to use faster follow-up interval
   const mutationPendingRef = useRef(false);
 
-  const doFetch = useCallback(async (signal?: AbortSignal) => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoading(true);
-    setError(null);
+  const scheduleNext = useRef<() => void>(() => {});
 
-    try {
-      const res = await fetch("/api/github/actions/runs", { signal });
-      if (signal?.aborted) return;
-      const data = (await res.json()) as {
-        runs?: GHWorkflowRun[];
-        summary?: GHRunsSummary;
-        repos?: string[];
-        workflows?: string[];
-        error?: string;
-      };
-      if (data.error) throw new Error(data.error);
+  const doFetch = useCallback(
+    async (signal: AbortSignal | undefined, options: { background?: boolean } = {}) => {
+      const background = options.background ?? false;
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+      if (!background) {
+        setGithubDataLoading(true);
+      }
+      clearGithubDataError();
 
-      const newRuns = data.runs ?? [];
-      runsRef.current = newRuns;
-      setRuns(newRuns);
-      setSummary(data.summary ?? computeSummary(newRuns));
-      setRepos(data.repos ?? []);
-      setWorkflows(data.workflows ?? []);
-      setFetchedAt(new Date().toISOString());
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      setError(err instanceof Error ? err.message : "Failed to fetch runs");
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  }, []);
+      try {
+        const res = await fetch("/api/github/actions/runs", { signal });
+        if (signal?.aborted) return;
+        const data = (await res.json()) as {
+          runs?: GHWorkflowRun[];
+          summary?: GHRunsSummary;
+          repos?: string[];
+          workflows?: string[];
+          error?: string;
+        };
+        if (data.error) throw new Error(data.error);
 
-  const scheduleNext = useCallback(() => {
+        const newRuns = data.runs ?? [];
+        replaceGithubDataSuccess({
+          runs: newRuns,
+          summary: data.summary,
+          repos: data.repos ?? [],
+          workflows: data.workflows ?? [],
+        });
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        setGithubDataFetchError(
+          err instanceof Error ? err.message : "Failed to fetch runs",
+        );
+      } finally {
+        loadingRef.current = false;
+        if (!background) {
+          setGithubDataLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  scheduleNext.current = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
-
     let interval: number;
     if (mutationPendingRef.current) {
       interval = POLL_AFTER_MUTATION_MS;
       mutationPendingRef.current = false;
     } else {
-      interval = computePollInterval(runsRef.current);
+      interval = computePollInterval(getGithubDataSnapshot().runs);
     }
-
     timerRef.current = setTimeout(() => {
+      if (!pathnameRef.current.startsWith("/github")) {
+        return;
+      }
       if (document.visibilityState === "hidden") {
-        // Tab not visible — defer until it becomes visible again
         return;
       }
       const controller = new AbortController();
       abortRef.current = controller;
-      doFetch(controller.signal).then(() => scheduleNext());
+      void (async () => {
+        await doFetch(controller.signal, { background: true });
+        if (pathnameRef.current.startsWith("/github")) {
+          scheduleNext.current();
+        }
+      })();
     }, interval);
-  }, [doFetch]);
+  };
 
   const refresh = useCallback(async () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    await doFetch(controller.signal);
-    scheduleNext();
-  }, [doFetch, scheduleNext]);
+    await doFetch(controller.signal, { background: false });
+    if (pathnameRef.current.startsWith("/github")) {
+      scheduleNext.current();
+    }
+  }, [doFetch]);
 
   const notifyMutation = useCallback(() => {
     mutationPendingRef.current = true;
-    // Trigger an immediate refresh
     void refresh();
   }, [refresh]);
 
-  const optimisticUpdate = useCallback(
-    (runId: number, patch: Partial<GHWorkflowRun>) => {
-      setRuns((prev) => {
-        const next = prev.map((r) => (r.id === runId ? { ...r, ...patch } : r));
-        runsRef.current = next;
-        setSummary(computeSummary(next));
-        return next;
-      });
-    },
-    [],
-  );
+  controllerActions.refresh = refresh;
+  controllerActions.notifyMutation = notifyMutation;
 
-  // Initial fetch + visibility-based resume
   useEffect(() => {
+    if (!pathname.startsWith("/github")) {
+      abortRef.current?.abort();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
-
-    doFetch(controller.signal).then(() => scheduleNext());
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refresh();
+    void (async () => {
+      await doFetch(controller.signal, { background: false });
+      if (controller.signal.aborted) return;
+      if (pathnameRef.current.startsWith("/github")) {
+        scheduleNext.current();
       }
+    })();
+
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!pathnameRef.current.startsWith("/github")) return;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      void (async () => {
+        await doFetch(ac.signal, { background: true });
+        if (pathnameRef.current.startsWith("/github")) {
+          scheduleNext.current();
+        }
+      })();
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       controller.abort();
-      if (timerRef.current) clearTimeout(timerRef.current);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname, doFetch]);
 
+  return null;
+}
+
+/**
+ * Renders a controller that fetches and polls only on `/github/*`.
+ * Children do not re-render on GitHub poll — only `useGithubData()` subscribers do.
+ */
+export function GithubDataProvider({ children }: { children: React.ReactNode }) {
   return (
-    <GithubDataContext.Provider
-      value={{
-        runs,
-        summary,
-        repos,
-        workflows,
-        loading,
-        error,
-        fetchedAt,
-        refresh,
-        notifyMutation,
-        optimisticUpdate,
-      }}
-    >
+    <>
+      <GithubDataController />
       {children}
-    </GithubDataContext.Provider>
+    </>
   );
 }
 
 export function useGithubData(): GithubDataContextValue {
-  const ctx = useContext(GithubDataContext);
-  if (!ctx) throw new Error("useGithubData must be used within GithubDataProvider");
-  return ctx;
+  const data = useSyncExternalStore(
+    subscribeGithubData,
+    getGithubDataSnapshot,
+    getGithubDataServerSnapshot,
+  );
+
+  return {
+    ...data,
+    summary: data.summary ?? defaultSummary,
+    refresh: () => controllerActions.refresh(),
+    notifyMutation: () => controllerActions.notifyMutation(),
+    optimisticUpdate: githubDataOptimisticUpdate,
+  };
 }

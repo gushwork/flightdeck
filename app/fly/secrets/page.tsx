@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { FlyApp, FlySecret } from "@/lib/fly/types";
 import {
@@ -63,9 +63,9 @@ function AddSecretRow({
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main page (useSearchParams must be under Suspense for static generation) ─
 
-export default function FlySecretsPage() {
+function FlySecretsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialApp = searchParams.get("app") ?? "";
@@ -346,5 +346,23 @@ export default function FlySecretsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function FlySecretsFallback() {
+  return (
+    <div className="mx-auto max-w-4xl space-y-8 p-6">
+      <div className="h-6 w-24 animate-pulse rounded bg-(--bg-muted)" />
+      <div className="h-8 w-48 animate-pulse rounded bg-(--bg-muted)" />
+      <div className="h-10 w-72 animate-pulse rounded-lg bg-(--bg-field)" />
+    </div>
+  );
+}
+
+export default function FlySecretsPage() {
+  return (
+    <Suspense fallback={<FlySecretsFallback />}>
+      <FlySecretsPageContent />
+    </Suspense>
   );
 }

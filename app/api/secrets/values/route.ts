@@ -62,6 +62,10 @@ export async function POST(request: Request) {
       const meta = secretMeta.get(val.arn);
       const tags = meta?.tags ?? {};
 
+      // Shallow key/value pass for JSON objects and arrays (fast path, optional matchedKey).
+      // If nothing matches at top level, we must still search the full string — nested
+      // values stringify to "[object Object]", so a bare `continue` would drop those hits.
+      let addedFromShallowJson = false;
       try {
         const parsed = JSON.parse(val.secretString);
         if (typeof parsed === 'object' && parsed !== null) {
@@ -76,12 +80,14 @@ export async function POST(request: Request) {
                 matchedContext: extractSnippet(val.secretString, query, key),
                 matchedKey: key,
               });
+              addedFromShallowJson = true;
               break;
             }
           }
-          continue;
         }
       } catch { /* not JSON, search raw string */ }
+
+      if (addedFromShallowJson) continue;
 
       if (val.secretString.toLowerCase().includes(q)) {
         results.push({

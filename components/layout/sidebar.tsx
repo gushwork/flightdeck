@@ -14,7 +14,7 @@ import {
   type NavIconId,
   type NavItemDef,
 } from "@/lib/modules/registry";
-import { useGithubData } from "@/lib/context/github-data-provider";
+import { useGithubNavActivity } from "@/lib/hooks/use-github-nav-activity";
 
 /** AWS collapsible shell key (distinct from `/aws` hub href). */
 const AWS_SECTION_EXPAND_KEY = "aws-section";
@@ -499,8 +499,7 @@ export function Sidebar({ secretsCount }: { secretsCount: number }) {
   const sections = getEnabledNavSections();
   const sectionById = new Map(sections.map((s) => [s.id, s]));
   const footer = getFooterNav();
-  const { summary } = useGithubData();
-  const hasActiveRuns = summary.inProgress > 0 || summary.queued > 0;
+  const { hasActiveRuns } = useGithubNavActivity();
 
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(
     () => expandedFromPathname(pathname),

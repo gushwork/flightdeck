@@ -108,6 +108,32 @@ export async function batchGetValues(
     batches.push(secretIds.slice(i, i + batchSize));
   }
 
+  const fromBatchEntry = (sv: {
+    Name?: string;
+    ARN?: string;
+    SecretBinary?: Uint8Array;
+    SecretString?: string;
+    VersionId?: string;
+    VersionStages?: string[];
+  }): SecretValue => {
+    if (sv.SecretBinary) {
+      return {
+        name: sv.Name ?? '',
+        arn: sv.ARN ?? '',
+        secretBinary: true,
+        versionId: sv.VersionId,
+        versionStages: sv.VersionStages,
+      };
+    }
+    return {
+      name: sv.Name ?? '',
+      arn: sv.ARN ?? '',
+      secretString: sv.SecretString,
+      versionId: sv.VersionId,
+      versionStages: sv.VersionStages,
+    };
+  };
+
   const results = await Promise.all(
     batches.map(async (batch) => {
       try {
@@ -118,28 +144,32 @@ export async function batchGetValues(
         const values: SecretValue[] = [];
 
         for (const sv of res.SecretValues ?? []) {
-          if (sv.SecretBinary) {
-            values.push({
-              name: sv.Name ?? '',
-              arn: sv.ARN ?? '',
-              secretBinary: true,
-              versionId: sv.VersionId,
-              versionStages: sv.VersionStages,
-            });
-            continue;
+          values.push(fromBatchEntry(sv));
+        }
+
+        for (const err of res.Errors ?? []) {
+          const sid = err.SecretId;
+          if (!sid) continue;
+          if (values.some((v) => v.arn === sid || v.name === sid)) continue;
+          try {
+            values.push(await getSecretValue(region, sid, profile));
+          } catch {
+            /* e.g. access denied; batch already reported the failure */
           }
-          values.push({
-            name: sv.Name ?? '',
-            arn: sv.ARN ?? '',
-            secretString: sv.SecretString,
-            versionId: sv.VersionId,
-            versionStages: sv.VersionStages,
-          });
         }
 
         return values;
       } catch {
-        return [] as SecretValue[];
+        // Whole batch failed: try one-by-one so one bad id does not drop the rest of the batch.
+        const out: SecretValue[] = [];
+        for (const id of batch) {
+          try {
+            out.push(await getSecretValue(region, id, profile));
+          } catch {
+            /* skip */
+          }
+        }
+        return out;
       }
     }),
   );
