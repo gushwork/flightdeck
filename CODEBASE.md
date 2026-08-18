@@ -3,22 +3,30 @@
 > Living document — updated by the agent on every substantive edit.  
 > Read this first when starting a new task.
 
+## Agent docs & code search
+
+- [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) — agent instructions; prefer **graphify** symbol lookup before `Grep`/`Glob`.
+- [`.agents/skills/graphify/SKILL.md`](.agents/skills/graphify/SKILL.md) — `/graphify` commands; index at `graphify-out/graph.json` (manual `build` / `update` / `auto-update`).
+
 ## Project Overview
 
-Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
 
 Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
 
 ## Module registry
 
-- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify**, **IAM**, **GitHub**, and **Fly** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
+- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Route 53**, **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify**, **IAM**, **Route 53**, **GitHub**, and **Fly** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
 
 ## Directory Structure
 
 ```
 .
 ├── PRD.md
+├── AGENTS.md              # Agent instructions (graphify-first code search)
+├── CLAUDE.md              # Claude-specific project instructions
 ├── CODEBASE.md
+├── graphify-out/graph.json # Structural AST index (graphify build)
 ├── lib/
 │   ├── types.ts            # SecretEntry, SecretSearchResult, SecretValue, Amplify* DTOs
 │   ├── utils.ts
@@ -62,7 +70,18 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── github-urls.ts      # Client-safe: isValidHttpsBadgeUrl, githubActionsWorkflowPageUrl (Actions UI vs file blob)
 │   ├── workflow-dispatch-schema.ts # Server-only: yaml → parse workflow_dispatch.inputs
 │   ├── workflow-dispatch-client.ts # initialDispatchInputValues, validate, serialize for POST body
-│   └── actions.ts          # listUserRepos, listWorkflows, listRepoRuns, listAllRuns (batched parallel); rerun/rerunFailed/cancel/dispatch/enable/disable/getRunLogsUrl; fetchAllWorkflowsFast; getWorkflowDetail
+│   ├── actions.ts          # listUserRepos, listWorkflows, listRepoRuns, listAllRuns (batched parallel); rerun/rerunFailed/cancel/dispatch/enable/disable/getRunLogsUrl; fetchAllWorkflowsFast; getWorkflowDetail
+│   ├── secrets-types.ts    # Client-safe DTOs for secrets hub inventory, mutations, drift
+│   ├── secrets-constants.ts # Cache key, TTL, concurrency knobs (repo=16, org=8, env=4)
+│   ├── parallel-pool.ts    # Bounded-concurrency worker pool for scans
+│   ├── filter-index.ts     # Client-safe filterIndexRows (dashboard filters locally)
+│   ├── secrets-crypto.ts   # libsodium sealed-box encryption for GitHub secret PUT
+│   ├── secrets.ts          # Actions org/repo/env list + set/delete; parallel intra-repo fetch
+│   ├── secrets-indexer.ts  # Full inventory scan via parallelPool, cache (PG + memory)
+│   ├── secrets-drift.ts    # Presence-based drift across repos
+│   ├── secrets-bulk.ts     # Multi-target mutation orchestration
+│   ├── secrets-dependabot.ts / secrets-codespaces.ts # Wave 3 platform fetchers
+│   └── secrets-platform-registry.ts # PLATFORM_FETCHERS plugin list for indexer
 ├── lib/fly/
 │   ├── types.ts            # FlyApp, FlyAppStatus, FlyMachine, MachineCheck, FlySecret DTOs (client-safe)
 │   └── cli.ts              # flyctl binary resolution (flyctl → fly), execFile JSON helpers, listApps, getAppStatus, getAppsStatus (bounded concurrency), listSecrets, setSecrets (stdin import), unsetSecrets
@@ -114,7 +133,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── github/
 │   │   ├── page.tsx            # Actions summary dashboard: stat ribbon (in-progress/queued/24h-success/24h-failed), active runs, recent failures, health bars; j/k/1/2 keyboard nav
 │   │   ├── runs/page.tsx       # All-runs card grid: filterable (status/repo/workflow/branch), URL-synced, 2D arrow-key nav, dispatch trigger
-│   │   └── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
+│   │   ├── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
+│   │   └── secrets/page.tsx    # Secrets hub: inventory dashboard, filters, repo drawer, drift audit, bulk edit
 │   ├── fly/
 │   │   ├── overview/page.tsx   # Fly app health grid: machines, regions, checks, deploy time; links to secrets and Fly dashboard
 │   │   └── secrets/page.tsx    # Per-app secrets CRUD: app selector (SearchableSelect), table with set/unset, bulk panel (Key–value / JSON / .env modes via FlySecretsBulkPanel)
@@ -206,6 +226,21 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/github/actions/workflows/list?repo=` | Fast workflow list: capped repos, parallel, timeouts; card grid fields only |
 | GET | `/api/github/actions/workflows/detail?repo=&workflowId=` | Full workflow detail: metadata + 15 recent runs + YAML file content (parallel) |
 | GET | `/api/github/actions/workflows/dispatch-schema?repo=&workflowId=` | Parses workflow YAML for `workflow_dispatch.inputs`; returns `suggestedRef` (default branch) |
+| GET | `/api/github/secrets/index` | Cached secrets/variables inventory across repos (Postgres TTL or in-memory) |
+| POST | `/api/github/secrets/index` | Force refresh inventory scan |
+| GET | `/api/github/secrets/search` | Filter inventory (`q`, `owner`, `scope`, `platform`, `kind`, `repo`, `environment`) |
+| GET | `/api/github/secrets/repo?fullName=` | Repo cockpit: repo/env/org secrets + variables |
+| POST | `/api/github/secrets/mutations` | Single-target set/delete secret or variable (`preview` flag) |
+| GET | `/api/github/secrets/drift` | Presence drift: secret names missing in some repos |
+| POST | `/api/github/secrets/bulk` | Multi-target bulk set/delete with preview |
+
+## GitHub Secrets Hub — performance
+
+- **Scan**: [`lib/github/parallel-pool.ts`](lib/github/parallel-pool.ts) bounds concurrency (16 repos, 8 orgs, 4 envs per repo). Intra-repo Actions calls run in parallel ([`lib/github/secrets.ts`](lib/github/secrets.ts)). Dependabot/Codespaces tasks share the same pool ([`lib/github/secrets-indexer.ts`](lib/github/secrets-indexer.ts)).
+- **Index payload**: variable **names** only in cache — no plaintext `value` (smaller JSON). Values load in repo cockpit via `GET /api/github/secrets/repo`.
+- **Listing**: dashboard filters in-browser with [`lib/github/filter-index.ts`](lib/github/filter-index.ts); debounced URL sync (300ms); paginated table (50 rows/page). `GET /api/github/secrets/search` kept for shareable deep links.
+- **Tests**: `npm run test` (unit); `npm run test:perf` (filter 10k rows <30ms, scan 200 repos mocked <5s). Config: `vitest.config.ts`, `vitest.perf.config.ts`.
+
 | GET | `/api/fly/apps?status=1` | List Fly apps (optional `?status=1` adds per-app machine health) |
 | GET | `/api/fly/apps/[app]/status` | App status: machines, regions, checks, health badge |
 | GET | `/api/fly/apps/[app]/secrets` | List secret names + digests (values never returned) |
@@ -241,6 +276,17 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - [`app/iam/page.tsx`](app/iam/page.tsx): module overview with cards for cross-account copy and create-user.
 - [`app/iam/cross-account-copy/page.tsx`](app/iam/cross-account-copy/page.tsx): search (type toggles), target profile select, copy with overwrite dialog when entity exists in target account.
 - [`app/iam/create-user/page.tsx`](app/iam/create-user/page.tsx): form with username input + template user dropdown (populated via `/api/iam/users`), optional group membership, confirmation dialog, success panel showing sign-in URL/credentials with copy buttons.
+
+## Route 53 / Fly domains
+
+- [`lib/domains/types.ts`](lib/domains/types.ts) — client-safe DTOs for hosted zones, DNS change preview/apply.
+- [`lib/domains/fly-route53.ts`](lib/domains/fly-route53.ts) — Fly `checkCert` → Route 53 diff, SHA-256 `changesHash`, apply with hash validation.
+- [`lib/fly/certs.ts`](lib/fly/certs.ts) — cert status mapping + defensive DNS instruction parse from flyctl JSON.
+- [`lib/aws/route53.ts`](lib/aws/route53.ts) — `@aws-sdk/client-route-53` list zones, longest-suffix match (public + private), record changes.
+- [`app/route53/page.tsx`](app/route53/page.tsx) — minimal AWS Route 53 hub.
+- [`app/route53/fly-domains/page.tsx`](app/route53/fly-domains/page.tsx) — table of Fly apps with pending/failed cert highlight; preview/apply modal.
+- API: `GET /api/fly/domains`, `GET /api/fly/apps/[app]/certs/[hostname]`, `GET /api/route53/hosted-zones`, `POST /api/route53/fly-domains/preview`, `POST /api/route53/fly-domains/apply`.
+- Plan pack: [`docs/plans/fly-route53-domains/`](docs/plans/fly-route53-domains/).
 
 ## Dashboard
 

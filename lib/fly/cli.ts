@@ -6,7 +6,15 @@ import type {
   FlyMachine,
   FlySecret,
   MachineCheck,
+  FlyAppDomainRow,
+  FlyCertCheckResult,
+  FlyCertSummary,
 } from "./types";
+import {
+  buildAppDomainRow,
+  parseCertCheckResult,
+  toCertSummary,
+} from "./certs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -118,6 +126,19 @@ interface RawSecret {
   status: string;
 }
 
+interface RawCert {
+  Hostname?: string;
+  hostname?: string;
+  ClientStatus?: string;
+  clientStatus?: string;
+  Status?: string;
+  /** Current flyctl JSON uses lowercase `status` (e.g. "Ready", "Awaiting configuration"). */
+  status?: string;
+  Configured?: boolean;
+  DNSConfigured?: boolean;
+  configured?: boolean;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export async function listApps(): Promise<FlyApp[]> {
@@ -224,4 +245,56 @@ export async function unsetSecrets(
 ): Promise<string> {
   if (names.length === 0) return "";
   return flyExec(["secrets", "unset", "-a", appName, "--detach", ...names]);
+}
+
+export async function listCerts(appName: string): Promise<FlyCertSummary[]> {
+  const raw = await flyJson<RawCert[]>(["certs", "list", "-a", appName]);
+  return raw.map((c) =>
+    toCertSummary(
+      c.Hostname ?? c.hostname ?? "",
+      c.ClientStatus ?? c.clientStatus ?? c.Status ?? c.status,
+      c.Configured ?? c.DNSConfigured ?? c.configured,
+    ),
+  ).filter((c) => c.hostname);
+}
+
+export async function checkCert(
+  appName: string,
+  hostname: string,
+): Promise<FlyCertCheckResult> {
+  const raw = await flyJson<unknown>([
+    "certs",
+    "check",
+    hostname,
+    "-a",
+    appName,
+  ]);
+  return parseCertCheckResult(hostname, raw);
+}
+
+export async function getAppsDomainStatus(
+  apps: FlyApp[],
+  concurrency = 4,
+): Promise<FlyAppDomainRow[]> {
+  const rows: FlyAppDomainRow[] = [];
+  const queue = [...apps];
+  async function worker() {
+    while (queue.length > 0) {
+      const app = queue.shift()!;
+      try {
+        const certs = await listCerts(app.name);
+        rows.push(
+          buildAppDomainRow(app.name, app.org, app.hostname, certs),
+        );
+      } catch {
+        rows.push(
+          buildAppDomainRow(app.name, app.org, app.hostname, []),
+        );
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, apps.length) }, worker),
+  );
+  return rows;
 }

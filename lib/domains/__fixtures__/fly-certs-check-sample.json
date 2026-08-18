@@ -1,0 +1,19 @@
+{
+  "hostname": "rag-api-dev.gushwork.ai",
+  "configured": false,
+  "status": "Awaiting configuration",
+  "dns_requirements": {
+    "a": ["66.241.125.127"],
+    "aaaa": ["2a09:8280:1::13a:c1b5:0"],
+    "cname": "jq3992e.gw-rag-api.fly.dev",
+    "acme_challenge": {
+      "name": "_acme-challenge.rag-api-dev.gushwork.ai",
+      "target": "rag-api-dev.gushwork.ai.jq3992e.flydns.net."
+    },
+    "ownership": {
+      "name": "_fly-ownership.rag-api-dev.gushwork.ai",
+      "app_value": "app-jq3992e",
+      "org_value": "org-z29jxm"
+    }
+  }
+}

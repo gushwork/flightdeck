@@ -11,7 +11,8 @@ export type ModuleId =
   | "settings"
   | "iam"
   | "github"
-  | "fly";
+  | "fly"
+  | "route53";
 
 export type NavIconId =
   | "dashboard"
@@ -31,6 +32,7 @@ export type NavIconId =
   | "gitBranch"
   | "fly"
   | "flySecrets"
+  | "globe"
   | "settings";
 
 /** Sub-links under a collapsible nav row (e.g. IAM utilities under Overview). */
@@ -77,7 +79,7 @@ export const SIDEBAR_SERVICE_GROUPS: SidebarServiceGroup[] = [
   {
     collapsible: true,
     headerModuleId: "platforms",
-    moduleIds: ["secrets", "amplify", "audit", "iam"],
+    moduleIds: ["secrets", "amplify", "audit", "iam", "route53"],
   },
   { moduleIds: ["github"] },
   { moduleIds: ["fly"] },
@@ -149,6 +151,21 @@ export const MODULE_NAV: ModuleNavSection[] = [
     ],
   },
   {
+    id: "route53",
+    enabled: true,
+    sectionLabel: "",
+    items: [
+      {
+        href: "/route53",
+        label: "Route 53",
+        icon: "globe",
+        children: [
+          { href: "/route53/fly-domains", label: "Fly domains", icon: "fly" },
+        ],
+      },
+    ],
+  },
+  {
     id: "github",
     enabled: true,
     sectionLabel: "",
@@ -161,6 +178,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
           { href: "/github", label: "Actions", icon: "playCircle" },
           { href: "/github/runs", label: "All runs", icon: "listRuns" },
           { href: "/github/workflows", label: "Workflows", icon: "gitBranch" },
+          { href: "/github/secrets", label: "Secrets", icon: "secrets" },
         ],
       },
     ],
@@ -210,6 +228,7 @@ const MODULE_AGENT_TOOLS: Record<ModuleId, AgentToolGroup[]> = {
   iam: [],
   github: [],
   fly: [],
+  route53: [],
 };
 
 export function getEnabledAgentToolGroups(): Set<AgentToolGroup> {

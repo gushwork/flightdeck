@@ -137,6 +137,12 @@ const icons: Record<NavIconId, React.ReactNode> = {
       <circle cx="8" cy="10.5" r="1" fill="currentColor" />
     </svg>
   ),
+  globe: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M2 8h12M8 2a10 10 0 010 12M8 2a10 10 0 000 12" />
+    </svg>
+  ),
 };
 
 function NavItem({
@@ -215,6 +221,9 @@ function isNavActive(href: string, pathname: string): boolean {
     return pathname.startsWith("/iam/cross-account-copy");
   if (href === "/iam/create-user")
     return pathname.startsWith("/iam/create-user");
+  if (href === "/route53") return pathname === "/route53";
+  if (href === "/route53/fly-domains")
+    return pathname.startsWith("/route53/fly-domains");
   if (href === "/github/overview")
     return pathname.startsWith("/github/overview");
   if (href === "/github") return pathname === "/github";
@@ -238,6 +247,7 @@ function routeInAwsSection(pathname: string): boolean {
   if (pathname.startsWith("/amplify")) return true;
   if (pathname === "/analyzer" || pathname.startsWith("/analyzer/")) return true;
   if (pathname === "/iam" || pathname.startsWith("/iam/")) return true;
+  if (pathname === "/route53" || pathname.startsWith("/route53/")) return true;
   return false;
 }
 

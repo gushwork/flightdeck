@@ -128,6 +128,23 @@ export const DIRECTORY_GROUPS: DirectoryGroup[] = [
           },
         ],
       },
+      {
+        id: "route53",
+        title: "Route 53",
+        accent: "accent",
+        links: [
+          {
+            href: "/route53",
+            label: "Overview",
+            description: "DNS tools for your AWS account.",
+          },
+          {
+            href: "/route53/fly-domains",
+            label: "Fly custom domains",
+            description: "List Fly apps with pending certs and apply DNS records to Route 53.",
+          },
+        ],
+      },
     ],
   },
   {
@@ -163,6 +180,12 @@ export const DIRECTORY_GROUPS: DirectoryGroup[] = [
             label: "Workflows",
             description: "Browse workflows, enable or disable, and open dispatch where supported.",
             accent: "accent",
+          },
+          {
+            href: "/github/secrets",
+            label: "Secrets",
+            description: "Inventory and manage Actions secrets and variables across repos and environments.",
+            accent: "warn",
           },
         ],
       },

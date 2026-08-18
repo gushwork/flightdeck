@@ -47,6 +47,9 @@ function derivePageContext(pathname: string): {
   if (pathname === "/github/overview")
     return { page: "githubOverview", entityId: null };
 
+  if (pathname === "/github/secrets")
+    return { page: "githubSecrets", entityId: null };
+
   if (pathname.startsWith("/github"))
     return { page: "github", entityId: null };
 
@@ -56,6 +59,12 @@ function derivePageContext(pathname: string): {
     return { page: "flySecrets", entityId: null };
   if (pathname.startsWith("/fly"))
     return { page: "fly", entityId: null };
+
+  if (pathname === "/route53") return { page: "route53Hub", entityId: null };
+  if (pathname === "/route53/fly-domains")
+    return { page: "route53FlyDomains", entityId: null };
+  if (pathname.startsWith("/route53"))
+    return { page: "route53", entityId: null };
 
   return { page: "general", entityId: null };
 }

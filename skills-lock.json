@@ -6,6 +6,12 @@
       "sourceType": "github",
       "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
     },
+    "graphify": {
+      "source": "howell5/willhong-skills",
+      "sourceType": "github",
+      "skillPath": "skills/graphify/SKILL.md",
+      "computedHash": "80456681e8ee5e57700fcca889a46179f81354a76559744cee8977c97d1faf66"
+    },
     "langchain-fundamentals": {
       "source": "langchain-ai/langchain-skills",
       "sourceType": "github",
@@ -20,6 +26,12 @@
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
       "computedHash": "8178769b6efe5ef38b1e0eeea682b83ff79a1e3b93acb96aa203ebcfb96d9b98"
+    },
+    "ponytail": {
+      "source": "dietrichgebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "4503a9dba2dca5836469a104c90e0c32ae9cb8bb97d02806e6fa06d15ceed56a"
     },
     "product-brainstorming": {
       "source": "anthropics/knowledge-work-plugins",
