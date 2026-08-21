@@ -170,6 +170,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 ## Patterns & Conventions
 
 - **Application code segmentation** — [`.cursor/skills/aws-manager-code-segmentation/SKILL.md`](.cursor/skills/aws-manager-code-segmentation/SKILL.md): segment UI, `app/api/*`, `lib/aws/*`, components, and agent tools by feature module; use registry as the single nav/tool toggle source.
+- **Dashboard UX (Excited method)** — [`.cursor/skills/dashboard-design/SKILL.md`](.cursor/skills/dashboard-design/SKILL.md): decision-first, role-based dashboards; tokens still come from the design-system skill / `design-system.mdc`.
 - **Path alias**: `@/*` → project root
 - **Design tokens**: `:root` in [`app/globals.css`](app/globals.css); Tailwind v4 `bg-(--token)`. Page chrome: `--bg-deep` (~`#fafafa`). **Fields, tables, data panels, secondary/outline controls**: `--bg-field` / `--bg-surface` / `--bg-card` (white); `--bg-hover` for hover on those surfaces.
 - **Fonts** (see [`app/layout.tsx`](app/layout.tsx)): Fraunces (`--font-display`), DM Sans (`--font-sans`), IBM Plex Mono (`--font-mono`); classes `font-(family-name:--font-display|mono)`
@@ -291,6 +292,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 ## Dashboard
 
 - Secrets-only metrics: counts, rotation coverage, tags, stale secrets, triage links.
+- Composition methodology for new/redesigned dashboards: [`.cursor/skills/dashboard-design/`](.cursor/skills/dashboard-design/) (Excited-agency principles; does not replace Flightdeck tokens).
 
 ## Gotchas
 
