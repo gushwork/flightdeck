@@ -47,6 +47,16 @@ function TileSkeleton() {
   );
 }
 
+function HeroSkeleton() {
+  return (
+    <div className="rounded-xl border border-(--border-hairline) bg-(--bg-elevated) px-5 py-4 shadow-sm sm:col-span-2">
+      <div className="mb-3 h-3 w-24 animate-pulse rounded bg-(--bg-muted)" />
+      <div className="h-10 w-16 animate-pulse rounded bg-(--bg-muted)" />
+      <div className="mt-2 h-3 w-40 animate-pulse rounded bg-(--bg-muted)" />
+    </div>
+  );
+}
+
 function ListSkeleton() {
   return (
     <div className="space-y-1" aria-label="Loading attention items">
@@ -69,6 +79,7 @@ function MetricTile({
   active,
   context,
   error,
+  hasSuccessfulData,
   label,
   lastUpdated,
   onSelect,
@@ -79,6 +90,7 @@ function MetricTile({
   active: boolean;
   context: string;
   error?: string | null;
+  hasSuccessfulData: boolean;
   label: string;
   lastUpdated: string | null;
   onSelect: () => void;
@@ -106,7 +118,7 @@ function MetricTile({
           </span>
           <span className="text-[10px] text-(--text-faint)">{context}</span>
         </span>
-        {error ? (
+        {error && !hasSuccessfulData ? (
           <span className="mt-3 block text-xs leading-relaxed text-(--danger)">
             {error}
           </span>
@@ -118,6 +130,11 @@ function MetricTile({
             <span className="mt-1 block text-[11px] text-(--text-faint)">
               {sub}
             </span>
+            {error ? (
+              <span className="mt-2 block text-[11px] font-medium text-(--warn)">
+                Data may be stale · {error}
+              </span>
+            ) : null}
           </>
         )}
       </button>
@@ -146,6 +163,7 @@ export function NeedsAttentionDashboard() {
     secrets,
     secretsLoading,
     secretsError,
+    secretsFetchedAt,
     loadSecrets,
     refreshSecrets,
   } = useData();
@@ -227,13 +245,20 @@ export function NeedsAttentionDashboard() {
     return latest;
   }, [secrets]);
 
-  const githubRows = github.error
-    ? []
-    : buildGithubExceptions(github.runs, nowMs);
-  const secretResult = secretsError
-    ? { rows: [], omittedStale: 0 }
-    : buildSecretsExceptions(secrets, nowMs);
-  const flyRows = flyError ? [] : buildFlyExceptions(flyApps);
+  const githubHasSuccessfulData = github.fetchedAt !== null;
+  const secretsHaveSuccessfulData = secretsFetchedAt !== null;
+  const flyHasSuccessfulData = flyFetchedAt !== null;
+  const githubSettled = githubHasSuccessfulData || github.error !== null;
+  const secretsSettled = secretsHaveSuccessfulData || secretsError !== null;
+  const flySettled = flyHasSuccessfulData || flyError !== null;
+
+  const githubRows = githubHasSuccessfulData
+    ? buildGithubExceptions(github.runs, nowMs)
+    : [];
+  const secretResult = secretsHaveSuccessfulData
+    ? buildSecretsExceptions(secrets, nowMs)
+    : { rows: [], omittedStale: 0 };
+  const flyRows = flyHasSuccessfulData ? buildFlyExceptions(flyApps) : [];
   const filtered = filterRowsBySource(
     [...githubRows, ...secretResult.rows, ...flyRows],
     source,
@@ -246,9 +271,15 @@ export function NeedsAttentionDashboard() {
   );
 
   const loadingWithoutData =
-    (github.loading && github.runs.length === 0) ||
-    (secretsLoading && secrets.length === 0) ||
-    (flyLoading && flyApps.length === 0);
+    !githubSettled || !secretsSettled || !flySettled;
+  const heroReady =
+    source === "github"
+      ? githubSettled
+      : source === "secrets"
+        ? secretsSettled
+        : source === "fly"
+          ? flySettled
+          : githubSettled && secretsSettled && flySettled;
   const allSlicesSucceeded =
     !github.loading &&
     !secretsLoading &&
@@ -292,38 +323,45 @@ export function NeedsAttentionDashboard() {
         className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"
         aria-label="Attention summary"
       >
-        <div className="rounded-xl border border-(--border-hairline) bg-(--bg-elevated) px-5 py-4 shadow-sm sm:col-span-2">
-          <p className="text-xs font-medium text-(--text-secondary)">
-            {source ? SOURCE_LABELS[source] : "All platforms"}
-          </p>
-          <div className="mt-2 flex items-end gap-3">
-            <span
-              className={`font-(family-name:--font-mono) text-4xl font-light tabular-nums ${
-                merged.total > 0 && merged.hasDanger
-                  ? "text-(--danger)"
-                  : "text-(--text-primary)"
-              }`}
-            >
-              {merged.total}
-            </span>
-            {merged.total > 0 && merged.hasDanger ? (
-              <span className="mb-1 rounded-lg bg-(--danger-muted) px-2 py-1 text-[11px] font-medium text-(--danger)">
-                need action
+        {!heroReady ? (
+          <HeroSkeleton />
+        ) : (
+          <div className="rounded-xl border border-(--border-hairline) bg-(--bg-elevated) px-5 py-4 shadow-sm sm:col-span-2">
+            <p className="text-xs font-medium text-(--text-secondary)">
+              {source ? SOURCE_LABELS[source] : "All platforms"}
+            </p>
+            <div className="mt-2 flex items-end gap-3">
+              <span
+                className={`font-(family-name:--font-mono) text-4xl font-light tabular-nums ${
+                  merged.total > 0 && merged.hasDanger
+                    ? "text-(--danger)"
+                    : "text-(--text-primary)"
+                }`}
+              >
+                {merged.total}
               </span>
-            ) : null}
+              {merged.total > 0 && merged.hasDanger ? (
+                <span className="mb-1 rounded-lg bg-(--danger-muted) px-2 py-1 text-[11px] font-medium text-(--danger)">
+                  need action
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-[11px] text-(--text-faint)">
+              {source
+                ? "Filtered attention items"
+                : "Items across connected platforms"}
+            </p>
           </div>
-          <p className="mt-1 text-[11px] text-(--text-faint)">
-            {source ? "Filtered attention items" : "Items across connected platforms"}
-          </p>
-        </div>
+        )}
 
-        {github.loading && github.runs.length === 0 ? (
+        {!githubSettled ? (
           <TileSkeleton />
         ) : (
           <MetricTile
             active={source === "github"}
             context="GitHub CLI"
             error={github.error}
+            hasSuccessfulData={githubHasSuccessfulData}
             label="GitHub"
             lastUpdated={
               github.fetchedAt ? relativeTime(github.fetchedAt) : null
@@ -339,13 +377,14 @@ export function NeedsAttentionDashboard() {
           />
         )}
 
-        {secretsLoading && secrets.length === 0 ? (
+        {!secretsSettled ? (
           <TileSkeleton />
         ) : (
           <MetricTile
             active={source === "secrets"}
             context={`${profile || "Default"} · ${region}`}
             error={secretsError}
+            hasSuccessfulData={secretsHaveSuccessfulData}
             label="Secrets"
             lastUpdated={secretUpdatedAt ? relativeTime(secretUpdatedAt) : null}
             onSelect={() => selectSource("secrets")}
@@ -355,7 +394,7 @@ export function NeedsAttentionDashboard() {
           />
         )}
 
-        {flyLoading && flyApps.length === 0 ? (
+        {!flySettled ? (
           <TileSkeleton />
         ) : (
           <div>
@@ -363,6 +402,7 @@ export function NeedsAttentionDashboard() {
               active={source === "fly"}
               context="Fly CLI"
               error={flyError}
+              hasSuccessfulData={flyHasSuccessfulData}
               label="Fly"
               lastUpdated={
                 flyFetchedAt ? relativeTime(flyFetchedAt) : null

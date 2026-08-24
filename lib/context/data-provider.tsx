@@ -15,6 +15,7 @@ interface DataContextValue {
   secrets: SecretEntry[];
   secretsLoading: boolean;
   secretsError: string | null;
+  secretsFetchedAt: string | null;
   loadSecrets: () => Promise<void>;
   refreshSecrets: () => Promise<void>;
 }
@@ -33,6 +34,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [secrets, setSecrets] = useState<SecretEntry[]>([]);
   const [secretsLoading, setSecretsLoading] = useState(false);
   const [secretsError, setSecretsError] = useState<string | null>(null);
+  const [secretsFetchedAt, setSecretsFetchedAt] = useState<string | null>(null);
 
   const lastLoadedWorkspaceRef = useRef<string | null>(null);
   const secretsLoadingRef = useRef(false);
@@ -49,6 +51,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setSecrets(data.secrets);
+      setSecretsFetchedAt(new Date().toISOString());
       lastLoadedWorkspaceRef.current = workspaceKey;
     } catch (e) {
       setSecretsError(
@@ -71,6 +74,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setSecrets(data.secrets);
+      setSecretsFetchedAt(new Date().toISOString());
       lastLoadedWorkspaceRef.current = workspaceKey;
     } catch (e) {
       setSecretsError(
@@ -93,6 +97,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         secrets,
         secretsLoading,
         secretsError,
+        secretsFetchedAt,
         loadSecrets,
         refreshSecrets,
       }}
