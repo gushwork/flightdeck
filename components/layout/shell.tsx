@@ -16,10 +16,6 @@ function derivePageContext(pathname: string): {
 
   if (pathname === "/secrets")
     return { page: "secretsList", entityId: null };
-  if (pathname === "/secrets/search")
-    return { page: "secretsSearch", entityId: null };
-  if (pathname === "/secrets/overview")
-    return { page: "secretsOverview", entityId: null };
   if (
     pathname.startsWith("/secrets/") &&
     pathname.split("/").length > 2
@@ -33,8 +29,6 @@ function derivePageContext(pathname: string): {
   if (pathname === "/analyzer" || pathname.startsWith("/analyzer/"))
     return { page: "analyzer", entityId: null };
 
-  if (pathname === "/aws") return { page: "awsOverview", entityId: null };
-
   if (pathname.startsWith("/settings"))
     return { page: "settings", entityId: null };
 
@@ -43,9 +37,6 @@ function derivePageContext(pathname: string): {
 
   if (pathname === "/iam" || pathname.startsWith("/iam/"))
     return { page: "iam", entityId: null };
-
-  if (pathname === "/github/overview")
-    return { page: "githubOverview", entityId: null };
 
   if (pathname === "/github/secrets")
     return { page: "githubSecrets", entityId: null };
@@ -70,7 +61,7 @@ function derivePageContext(pathname: string): {
 }
 
 function deriveBreadcrumb(pathname: string): string[] {
-  if (pathname === "/") return ["Application dashboard"];
+  if (pathname === "/") return ["Needs attention"];
   const segments = pathname.split("/").filter(Boolean);
   return segments.map(
     (s) =>

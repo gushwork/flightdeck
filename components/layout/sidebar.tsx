@@ -197,25 +197,12 @@ function resolveBadge(
 
 function isNavActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
-  if (href === "/aws") return pathname === "/aws";
-  if (href === "/secrets/search") return pathname.startsWith("/secrets/search");
-  if (href === "/secrets/overview")
-    return pathname.startsWith("/secrets/overview");
   if (href === "/secrets") {
-    return (
-      pathname === "/secrets" ||
-      (pathname.startsWith("/secrets/") &&
-        !pathname.startsWith("/secrets/search") &&
-        !pathname.startsWith("/secrets/overview"))
-    );
+    return pathname === "/secrets" || pathname.startsWith("/secrets/");
   }
   if (href === "/amplify") {
-    return (
-      pathname === "/amplify" ||
-      (pathname.startsWith("/amplify/") && !pathname.startsWith("/amplify/search"))
-    );
+    return pathname === "/amplify" || pathname.startsWith("/amplify/");
   }
-  if (href === "/amplify/search") return pathname.startsWith("/amplify/search");
   if (href === "/iam") return pathname === "/iam";
   if (href === "/iam/cross-account-copy")
     return pathname.startsWith("/iam/cross-account-copy");
@@ -224,8 +211,6 @@ function isNavActive(href: string, pathname: string): boolean {
   if (href === "/route53") return pathname === "/route53";
   if (href === "/route53/fly-domains")
     return pathname.startsWith("/route53/fly-domains");
-  if (href === "/github/overview")
-    return pathname.startsWith("/github/overview");
   if (href === "/github") return pathname === "/github";
   if (href === "/github/runs") return pathname.startsWith("/github/runs");
   if (href === "/github/workflows") return pathname.startsWith("/github/workflows");
@@ -240,9 +225,8 @@ function routeInNavGroup(
   return item.children.some((c) => isNavActive(c.href, pathname));
 }
 
-/** True when any AWS-sidebar route is active (hub + nested tools). */
+/** True when any nested AWS tool route is active. */
 function routeInAwsSection(pathname: string): boolean {
-  if (pathname === "/aws") return true;
   if (pathname.startsWith("/secrets")) return true;
   if (pathname.startsWith("/amplify")) return true;
   if (pathname === "/analyzer" || pathname.startsWith("/analyzer/")) return true;
@@ -435,9 +419,11 @@ function CollapsibleAwsSection({
   return (
     <div className="space-y-0.5">
       <div className="flex items-stretch gap-0.5 rounded-lg">
-        <Link
-          href={headerItem.href}
-          className={`${base} min-w-0 flex-1 items-center ${
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          className={`${base} min-w-0 flex-1 items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20 ${
             sectionActive ? activeClass : inactiveClass
           }`}
         >
@@ -448,7 +434,7 @@ function CollapsibleAwsSection({
               {resolveBadge(headerItem, secretsCount)}
             </span>
           )}
-        </Link>
+        </button>
         <button
           type="button"
           className={`flex w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${

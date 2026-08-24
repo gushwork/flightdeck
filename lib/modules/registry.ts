@@ -46,6 +46,7 @@ export interface NavItemDef {
   href: string;
   label: string;
   icon: NavIconId;
+  expandOnly?: boolean;
   /** When set, Sidebar shows count from data resolver */
   badge?: "secretsCount";
   /** When set, Sidebar renders a collapsible group: parent row links to `href`, children nest below */
@@ -90,7 +91,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
     id: "platforms",
     enabled: true,
     sectionLabel: "",
-    items: [{ href: "/aws", label: "AWS", icon: "aws" }],
+    items: [{ href: "/aws", label: "AWS", icon: "aws", expandOnly: true }],
   },
   {
     id: "secrets",
@@ -102,10 +103,6 @@ export const MODULE_NAV: ModuleNavSection[] = [
         label: "Secrets Manager",
         icon: "secrets",
         badge: "secretsCount",
-        children: [
-          { href: "/secrets/search", label: "Value search", icon: "search" },
-          { href: "/secrets/overview", label: "Insights", icon: "insights" },
-        ],
       },
     ],
   },
@@ -113,16 +110,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
     id: "amplify",
     enabled: true,
     sectionLabel: "",
-    items: [
-      {
-        href: "/amplify",
-        label: "Amplify",
-        icon: "amplify",
-        children: [
-          { href: "/amplify/search", label: "Env search", icon: "table" },
-        ],
-      },
-    ],
+    items: [{ href: "/amplify", label: "Amplify", icon: "amplify" }],
   },
   {
     id: "audit",
@@ -171,7 +159,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
     sectionLabel: "",
     items: [
       {
-        href: "/github/overview",
+        href: "/github",
         label: "GitHub",
         icon: "github",
         children: [
