@@ -34,7 +34,8 @@ export function secretsHref(opts: {
   const params = new URLSearchParams();
   if (opts.mode === "values") {
     params.set("mode", "values");
-    if (opts.q) params.set("q", opts.q);
+    const query = opts.q?.trim();
+    if (query) params.set("q", query);
   } else if (opts.filter && opts.filter !== "all") {
     params.set("filter", opts.filter);
   }

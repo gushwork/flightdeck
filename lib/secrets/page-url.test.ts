@@ -13,6 +13,12 @@ describe("secretsHref", () => {
       "/secrets?mode=values&q=x",
     );
   });
+
+  it("normalizes and encodes a values query", () => {
+    expect(secretsHref({ mode: "values", q: "  api key/value  " })).toBe(
+      "/secrets?mode=values&q=api+key%2Fvalue",
+    );
+  });
 });
 
 describe("parsers", () => {

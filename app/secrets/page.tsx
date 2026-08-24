@@ -583,29 +583,31 @@ function SecretsPageContent() {
       </h1>
 
       <div className="sticky top-0 z-10 -mx-8 flex flex-wrap items-center gap-3 border-b border-(--border-hairline) bg-(--bg-deep)/90 px-8 py-3 backdrop-blur-sm">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search secrets..."
-          className="w-64 rounded-lg border border-(--border) bg-(--bg-field) px-3 py-1.5 text-sm text-(--text-primary) placeholder:text-(--text-muted) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
-        />
         {mode === "browse" && (
-          <div className="flex flex-wrap gap-1">
-            {filters.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => handleFilter(f.key)}
-                className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20 ${
-                  filter === f.key
-                    ? "bg-(--accent) text-white"
-                    : "bg-(--bg-surface) text-(--text-secondary) hover:bg-(--bg-hover)"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search secrets..."
+              className="w-64 rounded-lg border border-(--border) bg-(--bg-field) px-3 py-1.5 text-sm text-(--text-primary) placeholder:text-(--text-muted) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
+            />
+            <div className="flex flex-wrap gap-1">
+              {filters.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => handleFilter(f.key)}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20 ${
+                    filter === f.key
+                      ? "bg-(--accent) text-white"
+                      : "bg-(--bg-surface) text-(--text-secondary) hover:bg-(--bg-hover)"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
         <div className="ml-auto flex items-center gap-2">
           <button

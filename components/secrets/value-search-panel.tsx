@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { SecretSearchResult } from "@/lib/types";
 import { BulkEditModal } from "@/components/secrets/bulk-edit-modal";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
+import { secretsHref } from "@/lib/secrets/page-url";
 
 function envColor(env: string) {
   switch (env) {
@@ -61,6 +63,7 @@ function HighlightedContext({ text, query }: { text: string; query: string }) {
 
 export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string }) {
   const { region, profile } = useAwsWorkspace();
+  const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
   const [searchedQuery, setSearchedQuery] = useState("");
   const [results, setResults] = useState<SecretSearchResult[]>([]);
@@ -79,6 +82,7 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
     setError(false);
     setHasSearched(true);
     setSearchedQuery(nextQuery);
+    router.replace(secretsHref({ mode: "values", q: nextQuery }));
     try {
       const response = await fetch("/api/secrets/values", {
         method: "POST",
@@ -100,7 +104,7 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
     } finally {
       setLoading(false);
     }
-  }, [profile, query, region]);
+  }, [profile, query, region, router]);
 
   function toggleSelect(name: string) {
     setSelected((current) => {
