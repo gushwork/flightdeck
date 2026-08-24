@@ -62,21 +62,11 @@ export function daysSinceAt(isoString: string, nowMs: number): number {
 }
 
 function isFailedConclusion(conclusion: GHWorkflowRun["conclusion"]): boolean {
-  return (
-    conclusion === "failure" ||
-    conclusion === "timed_out" ||
-    conclusion === "startup_failure"
-  );
+  return conclusion === "failure" || conclusion === "timed_out";
 }
 
 function isLiveStatus(status: GHWorkflowRun["status"]): boolean {
-  return (
-    status === "in_progress" ||
-    status === "queued" ||
-    status === "waiting" ||
-    status === "requested" ||
-    status === "pending"
-  );
+  return status === "in_progress" || status === "queued";
 }
 
 export function isSecretStale(secret: SecretEntry, nowMs: number): boolean {

@@ -69,6 +69,22 @@ function fly(name: string, health: "healthy" | "degraded" | "down" | "unknown" |
 }
 
 describe("githubKpis / buildGithubExceptions", () => {
+  it("does not treat waiting, requested, or pending as live", () => {
+    const runs = [
+      run({ id: 10, status: "waiting", conclusion: null }),
+      run({ id: 11, status: "requested", conclusion: null }),
+      run({ id: 12, status: "pending", conclusion: null }),
+    ];
+    expect(githubKpis(runs, NOW)).toEqual({ failed24h: 0, live: 0 });
+    expect(buildGithubExceptions(runs, NOW)).toEqual([]);
+  });
+
+  it("does not treat startup_failure as a failed exception", () => {
+    const runs = [run({ id: 20, status: "completed", conclusion: "startup_failure" })];
+    expect(githubKpis(runs, NOW)).toEqual({ failed24h: 0, live: 0 });
+    expect(buildGithubExceptions(runs, NOW)).toEqual([]);
+  });
+
   it("counts failed-in-24h and live separately; skips old failures", () => {
     const runs = [
       run({ id: 1, status: "completed", conclusion: "failure" }),
