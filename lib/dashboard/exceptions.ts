@@ -4,8 +4,6 @@ import type { EnrichedFlyApp } from "@/lib/fly/types";
 
 export const STALE_DAYS = 180;
 export const EXCEPTION_LIST_CAP = 15;
-export const UNROTATED_EXPAND_MAX = 5;
-export const STALE_EXPAND_MAX = 8;
 export const FAILED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export type ExceptionSeverity = "danger" | "warn" | "info";
@@ -35,10 +33,20 @@ const SEVERITY_ORDER: Record<ExceptionSeverity, number> = {
 };
 
 const SOURCE_HREF: Record<ExceptionSource, string> = {
-  github: "/github",
+  github: "/github/runs",
   secrets: "/secrets",
   fly: "/fly/overview",
 };
+
+function githubRunHref(run: GHWorkflowRun): string {
+  const params = new URLSearchParams({ repo: run.repoFullName });
+  if (run.headBranch) params.set("branch", run.headBranch);
+  return `/github/runs?${params.toString()}`;
+}
+
+function flyAppHref(appName: string): string {
+  return `/fly/overview?app=${encodeURIComponent(appName)}`;
+}
 
 export function ageLabelFromMs(thenMs: number, nowMs: number): string {
   const seconds = Math.floor((nowMs - thenMs) / 1000);
@@ -118,6 +126,7 @@ export function buildGithubExceptions(
   for (const r of runs) {
     const updated = new Date(r.updatedAt).getTime();
     const name = r.workflowName || r.name || "workflow";
+    const href = githubRunHref(r);
     if (isLiveStatus(r.status)) {
       rows.push({
         id: `github-live-${r.id}`,
@@ -125,7 +134,7 @@ export function buildGithubExceptions(
         source: "github",
         label: `${r.repoFullName} / ${name} live`,
         ageLabel: ageLabelFromMs(updated, nowMs),
-        href: "/github",
+        href,
         actionLabel: "Open",
         sortTimeMs: updated,
       });
@@ -138,73 +147,13 @@ export function buildGithubExceptions(
         source: "github",
         label: `${r.repoFullName} / ${name} failed`,
         ageLabel: ageLabelFromMs(updated, nowMs),
-        href: "/github",
+        href,
         actionLabel: "Open",
         sortTimeMs: updated,
       });
     }
   }
   return rows;
-}
-
-export function buildSecretsExceptions(
-  secrets: SecretEntry[],
-  nowMs: number,
-): { rows: ExceptionRow[]; omittedStale: number } {
-  const unrotated = secrets.filter((s) => !s.rotationEnabled);
-  const staleSorted = secrets
-    .filter((s) => isSecretStale(s, nowMs))
-    .sort(
-      (a, b) =>
-        daysSinceAt(b.lastAccessedDate!, nowMs) - daysSinceAt(a.lastAccessedDate!, nowMs),
-    );
-
-  const rows: ExceptionRow[] = [];
-
-  if (unrotated.length > UNROTATED_EXPAND_MAX) {
-    rows.push({
-      id: "secrets-unrotated-aggregate",
-      severity: "warn",
-      source: "secrets",
-      label: `${unrotated.length} secrets without auto-rotation`,
-      ageLabel: null,
-      href: "/secrets?filter=no-rotation",
-      actionLabel: "Review",
-      sortTimeMs: 0,
-    });
-  } else {
-    for (const s of unrotated) {
-      const t = s.lastChangedDate ?? s.createdDate;
-      rows.push({
-        id: `secrets-unrotated-${s.name}`,
-        severity: "warn",
-        source: "secrets",
-        label: `${s.name} without auto-rotation`,
-        ageLabel: t ? ageLabelFromMs(new Date(t).getTime(), nowMs) : null,
-        href: `/secrets/${encodeURIComponent(s.name)}`,
-        actionLabel: "View",
-        sortTimeMs: t ? new Date(t).getTime() : 0,
-      });
-    }
-  }
-
-  const shownStale = staleSorted.slice(0, STALE_EXPAND_MAX);
-  const omittedStale = Math.max(0, staleSorted.length - shownStale.length);
-  for (const s of shownStale) {
-    const d = daysSinceAt(s.lastAccessedDate!, nowMs);
-    rows.push({
-      id: `secrets-stale-${s.name}`,
-      severity: "info",
-      source: "secrets",
-      label: `${s.name} not accessed in ${d} days`,
-      ageLabel: `${d}d ago`,
-      href: `/secrets/${encodeURIComponent(s.name)}`,
-      actionLabel: "View",
-      sortTimeMs: new Date(s.lastAccessedDate!).getTime(),
-    });
-  }
-
-  return { rows, omittedStale };
 }
 
 export function buildFlyExceptions(apps: EnrichedFlyApp[]): ExceptionRow[] {
@@ -214,11 +163,11 @@ export function buildFlyExceptions(apps: EnrichedFlyApp[]): ExceptionRow[] {
     if (h !== "degraded" && h !== "down") continue;
     rows.push({
       id: `fly-${a.name}`,
-      severity: "danger",
+      severity: h === "down" ? "danger" : "warn",
       source: "fly",
       label: `${a.name} ${h}`,
       ageLabel: null,
-      href: "/fly/overview",
+      href: flyAppHref(a.name),
       actionLabel: "Open",
       sortTimeMs: 0,
     });
@@ -226,40 +175,45 @@ export function buildFlyExceptions(apps: EnrichedFlyApp[]): ExceptionRow[] {
   return rows;
 }
 
-export function mergeExceptions(
-  rows: ExceptionRow[],
-  omittedStale = 0,
-): {
+export interface MergedExceptions {
   visible: ExceptionRow[];
+  /** Rows needing action now (danger + warn). */
   total: number;
+  dangerCount: number;
+  warnCount: number;
   overflow: OverflowLine[];
   hasDanger: boolean;
-} {
+}
+
+/**
+ * Sort by urgency (severity, then recency), cap the visible list, and roll
+ * hidden rows into per-source overflow links.
+ */
+export function mergeExceptions(rows: ExceptionRow[]): MergedExceptions {
   const sorted = [...rows].sort((a, b) => {
     const sd = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
     if (sd !== 0) return sd;
     return b.sortTimeMs - a.sortTimeMs;
   });
+
   const visible = sorted.slice(0, EXCEPTION_LIST_CAP);
   const hidden = sorted.slice(EXCEPTION_LIST_CAP);
   const overflowCounts: Record<ExceptionSource, number> = {
     github: 0,
-    secrets: omittedStale,
+    secrets: 0,
     fly: 0,
   };
   for (const r of hidden) overflowCounts[r.source] += 1;
 
-  const overflow: OverflowLine[] = (["github", "secrets", "fly"] as ExceptionSource[])
+  const overflow: OverflowLine[] = (Object.keys(overflowCounts) as ExceptionSource[])
     .filter((s) => overflowCounts[s] > 0)
-    .map((s) => ({
-      source: s,
-      count: overflowCounts[s],
-      href: s === "secrets" && omittedStale > 0 ? "/secrets?filter=stale" : SOURCE_HREF[s],
-    }));
+    .map((s) => ({ source: s, count: overflowCounts[s], href: SOURCE_HREF[s] }));
 
   return {
     visible,
-    total: sorted.length + omittedStale,
+    total: sorted.length,
+    dangerCount: sorted.filter((r) => r.severity === "danger").length,
+    warnCount: sorted.filter((r) => r.severity === "warn").length,
     overflow,
     hasDanger: sorted.some((r) => r.severity === "danger"),
   };

@@ -5,7 +5,6 @@ import type { EnrichedFlyApp } from "@/lib/fly/types";
 import {
   buildFlyExceptions,
   buildGithubExceptions,
-  buildSecretsExceptions,
   filterRowsBySource,
   flyUnhealthyCount,
   githubKpis,
@@ -99,13 +98,13 @@ describe("githubKpis / buildGithubExceptions", () => {
     expect(githubKpis(runs, NOW)).toEqual({ failed24h: 1, live: 1 });
     const rows = buildGithubExceptions(runs, NOW);
     expect(rows.map((r) => r.id)).toEqual(["github-fail-1", "github-live-3"]);
-    expect(rows[0]?.href).toBe("/github");
+    expect(rows[0]?.href).toBe("/github/runs?repo=acme%2Fapp&branch=main");
     expect(rows[0]?.severity).toBe("danger");
     expect(rows[1]?.severity).toBe("warn");
   });
 });
 
-describe("secretsHygieneStats / buildSecretsExceptions", () => {
+describe("secretsHygieneStats", () => {
   it("hygiene is union of unrotated and stale", () => {
     const secrets = [
       secret({ name: "a", rotationEnabled: false }),
@@ -123,28 +122,6 @@ describe("secretsHygieneStats / buildSecretsExceptions", () => {
       hygiene: 3,
     });
   });
-
-  it("aggregates unrotated when count > 5", () => {
-    const secrets = Array.from({ length: 6 }, (_, i) =>
-      secret({ name: `u${i}`, rotationEnabled: false }),
-    );
-    const { rows } = buildSecretsExceptions(secrets, NOW);
-    expect(rows.filter((r) => r.id.startsWith("secrets-unrotated"))).toHaveLength(1);
-    expect(rows[0]?.href).toBe("/secrets?filter=no-rotation");
-    expect(rows[0]?.label).toBe("6 secrets without auto-rotation");
-  });
-
-  it("caps stale rows at 8 and reports omittedStale", () => {
-    const secrets = Array.from({ length: 10 }, (_, i) =>
-      secret({
-        name: `s${i}`,
-        lastAccessedDate: `2025-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
-      }),
-    );
-    const { rows, omittedStale } = buildSecretsExceptions(secrets, NOW);
-    expect(rows.filter((r) => r.id.startsWith("secrets-stale-"))).toHaveLength(8);
-    expect(omittedStale).toBe(2);
-  });
 });
 
 describe("buildFlyExceptions / flyUnhealthyCount", () => {
@@ -159,13 +136,24 @@ describe("buildFlyExceptions / flyUnhealthyCount", () => {
     expect(flyUnhealthyCount(apps)).toBe(2);
     const rows = buildFlyExceptions(apps);
     expect(rows.map((r) => r.id)).toEqual(["fly-bad", "fly-dead"]);
-    expect(rows.every((r) => r.href === "/fly/overview")).toBe(true);
+  });
+
+  it("maps down to danger and degraded to warn, deep-linking each app", () => {
+    const rows = buildFlyExceptions([fly("bad", "degraded"), fly("dead", "down")]);
+    expect(rows[0]).toMatchObject({
+      severity: "warn",
+      href: "/fly/overview?app=bad",
+    });
+    expect(rows[1]).toMatchObject({
+      severity: "danger",
+      href: "/fly/overview?app=dead",
+    });
   });
 });
 
 describe("mergeExceptions", () => {
-  it("sorts danger then warn then info, then recency desc; caps at 15; hero total includes omitted stale", () => {
-    const runs = Array.from({ length: 12 }, (_, i) =>
+  it("sorts danger then warn then info, then recency desc; caps at 15; total counts action rows", () => {
+    const runs = Array.from({ length: 18 }, (_, i) =>
       run({
         id: i + 1,
         status: "completed",
@@ -174,18 +162,31 @@ describe("mergeExceptions", () => {
       }),
     );
     const gh = buildGithubExceptions(runs, NOW);
-    const secrets = Array.from({ length: 10 }, (_, i) =>
-      secret({
-        name: `stale-${i}`,
-        lastAccessedDate: "2025-01-01T00:00:00.000Z",
-      }),
-    );
-    const { rows, omittedStale } = buildSecretsExceptions(secrets, NOW);
-    const merged = mergeExceptions([...gh, ...rows], omittedStale);
+    const merged = mergeExceptions(gh);
     expect(merged.visible).toHaveLength(15);
-    expect(merged.total).toBe(gh.length + rows.length + omittedStale);
+    expect(merged.total).toBe(gh.length);
+    expect(merged.dangerCount).toBe(gh.length);
+    expect(merged.warnCount).toBe(0);
     expect(merged.visible[0]?.severity).toBe("danger");
-    expect(merged.overflow.some((o) => o.source === "secrets" && o.count >= 2)).toBe(true);
+    expect(merged.overflow).toEqual([
+      { source: "github", count: gh.length - 15, href: "/github/runs" },
+    ]);
+  });
+
+  it("reports danger and warn counts on the merged result", () => {
+    const rows = [
+      ...buildGithubExceptions(
+        [run({ id: 1, status: "in_progress", conclusion: null })],
+        NOW,
+      ),
+      ...buildFlyExceptions([fly("bad", "degraded")]),
+      ...buildFlyExceptions([fly("dead", "down")]),
+    ];
+    const merged = mergeExceptions(rows);
+    expect(merged.total).toBe(3);
+    expect(merged.dangerCount).toBe(1);
+    expect(merged.warnCount).toBe(2);
+    expect(merged.hasDanger).toBe(true);
   });
 });
 

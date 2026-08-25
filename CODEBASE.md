@@ -10,13 +10,13 @@
 
 ## Project Overview
 
-Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management, with an AI agent layer. Change plans from the agent are **copy CLI / JSON only** (no server-side execution endpoint for change plans).
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management. The AI chat agent was **removed** (2026-08-25); all data flows only to AWS/GitHub/Fly APIs with local credentials.
 
 Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
 
 ## Module registry
 
-- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Route 53**, **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups; maps enabled modules to **agent tool groups** (`secrets`, `audit`, `cloudtrail`, `propose`). **Amplify**, **IAM**, **Route 53**, **GitHub**, and **Fly** modules have no agent tools (`MODULE_AGENT_TOOLS` empty).
+- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Route 53**, **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups.
 
 ## Directory Structure
 
@@ -39,24 +39,14 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   │   └── exceptions.ts     # Client-safe exception row builders for home "Needs attention" inbox (GitHub, secrets, Fly)
 │   │   └── legacy-redirect.ts # legacyDashboardRedirect() — /aws, /github/overview, /secrets/{overview,search}, /amplify/search
 │   ├── modules/
-│   │   └── registry.ts     # Feature flags + nav + agent tool group mapping; ModuleId now includes "github"
+│   │   └── registry.ts     # Feature flags + nav; ModuleId now includes "github"
 │   ├── context/
 │   │   ├── aws-workspace-provider.tsx # Region + profile; saved profile names load after mount (hydration-safe); env + aws-saved-profiles; notifyAwsProfileListChanged
 │   │   ├── data-provider.tsx # Secrets list; reloads on region/profile change
-│   │   ├── chat-provider.tsx
 │   │   └── github-data-provider.tsx # Smart-polling GitHub Actions data; tiered intervals (8s active, 15s recent-fail, 60s idle); pauses on tab blur; immediate refetch after mutations; optimistic updates
 │   ├── hooks/
 │   │   ├── use-secrets.ts  # Standalone secrets fetcher (DataProvider is primary for UI)
 │   │   └── use-singleton-popover-dismiss.ts # Dismiss anchored popovers on outside click / Escape (data-popover-root + data-popover-key)
-│   ├── agent/
-│   │   ├── engine.ts
-│   │   ├── tools.ts        # buildAgentTools() from registry
-│   │   ├── tool-handlers.ts
-│   │   ├── filter.ts
-│   │   ├── prompts.ts
-│   │   ├── chat-client.ts  # buildMessagesForAgentApi — stable history for POST /api/agent/chat
-│   │   ├── openrouter-model.ts # DEFAULT_OPENROUTER_MODEL, resolveOpenRouterModel, storage key constant
-│   │   └── change-plan.ts  # PlanStep.apiCall.service: secretsmanager only
 │   └── aws/
 │       ├── client.ts      # getRegion, awsClientOptions (fromIni), profileCacheSegment, parseProfileParam
 │       ├── regions.ts     # AWS_REGIONS, AWS_REGION_LOCATIONS, formatRegionMenuLabel
@@ -90,14 +80,11 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   └── cli.ts              # flyctl binary resolution (flyctl → fly), execFile JSON helpers, listApps, getAppStatus, getAppsStatus (bounded concurrency), listSecrets, setSecrets (stdin import), unsetSecrets
 ├── components/
 │   ├── layout/
-│   │   ├── shell.tsx       # Page context for agent; sidebar + main + agent
+│   │   ├── shell.tsx       # Sidebar + main content (agent column removed)
 │   │   ├── topbar.tsx      # Renamed "Flightdeck" brand (was AWS Manager)
 │   │   ├── sidebar.tsx     # Registry-driven nav; collapsible AWS shell; expand/collapse all; brand marks + route-synced expansion; GitHub activity dot when Actions are busy
 │   │   ├── loading-skeleton.tsx
 │   │   └── stale-badge.tsx
-│   ├── agent/
-│   │   ├── sidebar.tsx
-│   │   └── change-plan-card.tsx  # Copy CLI/JSON; Approve optional (off)
 │   ├── github/
 │   │   ├── run-utils.tsx        # Shared: StatusIcon, EventBadge, ElapsedTimer, formatDuration, relativeTime, isActiveStatus, isFailedConclusion
 │   │   ├── run-card.tsx         # Reusable workflow run card: status icon, metadata, contextual action buttons (cancel/re-run/view-logs)
@@ -142,7 +129,6 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   │   ├── overview/page.tsx   # Fly app health grid: machines, regions, checks, deploy time; links to secrets and Fly dashboard
 │   │   └── secrets/page.tsx    # Per-app secrets CRUD: app selector (SearchableSelect), table with set/unset, bulk panel (Key–value / JSON / .env modes via FlySecretsBulkPanel)
 │   └── api/
-│       ├── agent/chat/route.ts
 │       ├── amplify/
 │       │   ├── apps/route.ts
 │       │   ├── apps/[appId]/route.ts
@@ -162,17 +148,15 @@ Target: single operator managing secrets, Amplify env configuration, access find
 
 ## Architecture Decisions
 
-- **Module registry**: Navigation and agent tools are driven by one config so features can be toggled or re-added without scattered conditionals.
+- **Module registry**: Navigation is driven by one config so features can be toggled or re-added without scattered conditionals.
 - **DataProvider**: Loads **secrets** only; refetches when **region** or **profile** changes (see `AwsWorkspaceProvider`).
 - **AWS profile**: Optional named profile per request (`profile` query/body); server uses `@aws-sdk/credential-providers` `fromIni` when set; otherwise default credential chain. Cache keys: `secrets:{region}:{profileSegment}`.
-- **Server cache (optional)**: When `DATABASE_URL` is set, [`lib/cache.ts`](lib/cache.ts) uses Postgres for TTL’d JSON cache (secrets list reads and agent `list_secrets` path). Missing DB or connection errors fall back to uncached behavior; cache invalidation on secret create/delete/update routes.
-- **Agent tools**: `list_secrets`, `get_secret_metadata`, `list_analyzers`, `list_analyzer_findings`, `lookup_cloudtrail_events`, `propose_change` (registry-filtered).
-- **Change plans**: UI shows impact + copy CLI/JSON; no `/api/.../execute` in repo.
+- **Server cache (optional)**: When `DATABASE_URL` is set, [`lib/cache.ts`](lib/cache.ts) uses Postgres for TTL’d JSON cache (secrets list reads). Missing DB or connection errors fall back to uncached behavior; cache invalidation on secret create/delete/update routes.
 - **IAM cross-account copy**: Source = workspace profile; target = **named** profile only (`/api/iam/copy` and `/api/iam/exists` require non-empty `targetProfile`). IAM entities are **global per AWS account** (not regional); region is still passed for SDK clients. User copy does not migrate passwords, MFA, or access keys.
 
 ## Patterns & Conventions
 
-- **Application code segmentation** — [`.cursor/skills/aws-manager-code-segmentation/SKILL.md`](.cursor/skills/aws-manager-code-segmentation/SKILL.md): segment UI, `app/api/*`, `lib/aws/*`, components, and agent tools by feature module; use registry as the single nav/tool toggle source.
+- **Application code segmentation** — [`.cursor/skills/aws-manager-code-segmentation/SKILL.md`](.cursor/skills/aws-manager-code-segmentation/SKILL.md): segment UI, `app/api/*`, `lib/aws/*`, and components by feature module; use registry as the single nav toggle source.
 - **Dashboard UX (Excited method)** — [`.cursor/skills/dashboard-design/SKILL.md`](.cursor/skills/dashboard-design/SKILL.md): decision-first, role-based dashboards; tokens still come from the design-system skill / `design-system.mdc`.
 - **Path alias**: `@/*` → project root
 - **Design tokens**: `:root` in [`app/globals.css`](app/globals.css); Tailwind v4 `bg-(--token)`. Page chrome: `--bg-deep` (~`#fafafa`). **Fields, tables, data panels, secondary/outline controls**: `--bg-field` / `--bg-surface` / `--bg-card` (white); `--bg-hover` for hover on those surfaces.
@@ -194,8 +178,6 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | `@aws-sdk/credential-providers` | `fromIni` for named profiles on API routes |
 | `pg` | Optional Postgres for [`lib/cache.ts`](lib/cache.ts) when `DATABASE_URL` is set |
 | `next` 16.2.3 | App Router |
-| `openai` | OpenRouter via OpenAI SDK |
-| `react-markdown` | Agent chat |
 
 ## API Surface (current)
 
@@ -208,7 +190,6 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/secrets/[id]/history?region=&profile=` | CloudTrail GetSecretValue events |
 | POST | `/api/secrets/create` | Body: `name`, `secretString`, optional `description`, `tags`, `region`, `profile` — creates secret in Secrets Manager |
 | POST | `/api/secrets/delete` | Body: `secretNames`, `region`, optional `profile` |
-| POST | `/api/agent/chat` | Body: `messages`, `page`, optional `region`, `profile`, `model` (OpenRouter id; defaults to env `OPENROUTER_MODEL` or built-in default) |
 | GET/POST | `/api/analyzer` | Query/body: `region`, optional `profile` |
 | GET | `/api/amplify/apps?region=&profile=&nextToken=` | Paginated Amplify app list |
 | GET | `/api/amplify/apps/[appId]?region=&profile=` | App snapshot (branches + environment variables) |
@@ -250,24 +231,16 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/fly/apps/[app]/secrets` | List secret names + digests (values never returned) |
 | POST | `/api/fly/apps/[app]/secrets` | Body: `{ set?: Record<string,string>, unset?: string[] }` — set/remove secrets via flyctl |
 
-## AI Agent
-
-- **Read tools**: `list_secrets`, `get_secret_metadata`, `list_analyzers`, `list_analyzer_findings`, `lookup_cloudtrail_events` (subset depends on registry).
-- **Tool AWS context**: Chat request sends `region` and `profile`; `dispatch()` uses them for SDK calls and secret list cache keys.
-- **Model**: UI reads `openrouter-model` from localStorage (Settings); request body `model` overrides; server uses `resolveOpenRouterModel()` → `OPENROUTER_MODEL` env → default (`lib/agent/openrouter-model.ts`).
-- **Chat history**: `buildMessagesForAgentApi()` builds the POST body from the thread **before** optimistic UI updates so the latest user message is always included; change plans are keyed by stable assistant `id` (`ChatMessage.id`), not array index.
-- **`propose_change`**: Returns a plan over SSE; user copies CLI/JSON from the change plan card.
-- **Sanitization**: `sanitizeForLlm()` — no raw secret values in tool results.
-- **IAM pages**: `page: iam` in shell — prompts note IAM mutations are UI-only.
-
 ## Access Analyzer & CloudTrail
 
 - Analyzer + CloudTrail behavior unchanged in `lib/aws/analyzer.ts` and `lib/aws/cloudtrail.ts`.
 
 ## Dashboard
 
-- `/` is **Needs attention**: hero = exception row total; supporting GitHub failed/live, secrets hygiene (union), Fly unhealthy (`degraded`/`down`). One exception list (cap 15). No tool directory.
-- Builders: [`lib/dashboard/exceptions.ts`](lib/dashboard/exceptions.ts). Redirects: [`lib/dashboard/legacy-redirect.ts`](lib/dashboard/legacy-redirect.ts).
+- `/` is **Needs attention**: hero = **danger count** (warn shown as `+N watch` chip); exception list (cap 15) holds only action rows — GitHub live/failed and Fly degraded/down. Secrets hygiene (unrotated/stale) is a separate compact strip below the list, never in the queue or hero total.
+- Rows deep-link to records: GitHub → `/github/runs?repo=&branch=`, Fly → `/fly/overview?app=` (overview highlights + scrolls to the focused app). Hygiene chips → `/secrets?filter=no-rotation|stale`.
+- Errored platform slices dim their tile, show a "X unavailable — totals cover N of 3 platforms" banner; hero counts only loaded platforms. 90s auto-refresh for AWS/Fly slices (GitHub has its own smart polling), paused when the tab is hidden.
+- Builders: [`lib/dashboard/exceptions.ts`](lib/dashboard/exceptions.ts) (`mergeExceptions` returns `total/dangerCount/warnCount`; no hygiene rows). Tests: [`lib/dashboard/exceptions.test.ts`](lib/dashboard/exceptions.test.ts). Redirects: [`lib/dashboard/legacy-redirect.ts`](lib/dashboard/legacy-redirect.ts).
 - `/aws` → `/`. `/github/overview` → `/github`. AWS sidebar header is expand-only.
 - URL filters: home `?source=github|secrets|fly`; secrets chips/insight tiles and `?mode=values` sync `filter` in the URL.
 - GitHub data fetches once on home; live polling only under `/github` (`GitHubDataProvider` smart polling). Home is no longer a tool directory.

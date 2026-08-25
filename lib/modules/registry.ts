@@ -1,5 +1,5 @@
 /**
- * Single place to enable/disable product modules (nav + agent tools).
+ * Single place to enable/disable product modules (nav).
  * Re-enable `iam` later by setting enabled: true and restoring routes/AWS code.
  */
 
@@ -202,30 +202,4 @@ export function getEnabledNavSections(): ModuleNavSection[] {
 export function getFooterNav(): NavItemDef[] {
   const mod = MODULE_NAV.find((m) => m.footer && m.enabled);
   return mod?.items ?? [];
-}
-
-/** Which high-level tool groups the agent may use (maps to entries in tools.ts). */
-export type AgentToolGroup = "secrets" | "audit" | "cloudtrail" | "propose";
-
-const MODULE_AGENT_TOOLS: Record<ModuleId, AgentToolGroup[]> = {
-  platforms: [],
-  secrets: ["secrets", "cloudtrail", "propose"],
-  amplify: [],
-  audit: ["audit", "propose"],
-  settings: [],
-  iam: [],
-  github: [],
-  fly: [],
-  route53: [],
-};
-
-export function getEnabledAgentToolGroups(): Set<AgentToolGroup> {
-  const set = new Set<AgentToolGroup>();
-  for (const m of MODULE_NAV) {
-    if (!m.enabled) continue;
-    for (const g of MODULE_AGENT_TOOLS[m.id]) {
-      set.add(g);
-    }
-  }
-  return set;
 }
