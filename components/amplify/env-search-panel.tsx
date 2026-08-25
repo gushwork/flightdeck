@@ -49,7 +49,7 @@ function HighlightedContext({ text, query }: { text: string; query: string }) {
 export function EnvSearchPanel({ initialQuery = "" }: { initialQuery?: string }) {
   const { region, profile } = useAwsWorkspace();
   const router = useRouter();
-  const searchedInitialQuery = useRef(false);
+  const lastFetchedQuery = useRef("");
   const [query, setQuery] = useState(initialQuery);
   const [searchedQuery, setSearchedQuery] = useState("");
   const [results, setResults] = useState<AmplifySearchHit[]>([]);
@@ -69,6 +69,7 @@ export function EnvSearchPanel({ initialQuery = "" }: { initialQuery?: string })
       setError(false);
       setHasSearched(true);
       setSearchedQuery(nextQuery);
+      lastFetchedQuery.current = nextQuery;
       router.replace(amplifyHref({ mode: "search", q: nextQuery }));
 
       try {
@@ -103,8 +104,9 @@ export function EnvSearchPanel({ initialQuery = "" }: { initialQuery?: string })
   );
 
   useEffect(() => {
-    if (searchedInitialQuery.current || !initialQuery.trim()) return;
-    searchedInitialQuery.current = true;
+    if (!initialQuery.trim()) return;
+    if (lastFetchedQuery.current === initialQuery.trim()) return;
+    lastFetchedQuery.current = initialQuery.trim();
     void doSearch(initialQuery);
   }, [doSearch, initialQuery]);
 
