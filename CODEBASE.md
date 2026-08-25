@@ -35,6 +35,9 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── amplify-env-map.ts    # JSON / .env parsing for Amplify env maps (reuses secret-value-format)
 │   ├── db.ts                 # Optional Postgres pool (DATABASE_URL) for server cache
 │   ├── cache.ts              # getCached / setCache / invalidateCache — secrets list + tool handler cache
+│   ├── dashboard/
+│   │   └── exceptions.ts     # Client-safe exception row builders for home "Needs attention" inbox (GitHub, secrets, Fly)
+│   │   └── legacy-redirect.ts # legacyDashboardRedirect() — /aws, /github/overview, /secrets/{overview,search}, /amplify/search
 │   ├── modules/
 │   │   └── registry.ts     # Feature flags + nav + agent tool group mapping; ModuleId now includes "github"
 │   ├── context/
@@ -119,7 +122,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 ├── app/
 │   ├── globals.css         # Design tokens + @theme font aliases
 │   ├── layout.tsx          # Fraunces, DM Sans, IBM Plex Mono
-│   ├── page.tsx            # Secrets-focused dashboard
+│   ├── page.tsx            # Needs attention dashboard (exception inbox; no tool directory)
 │   ├── settings/page.tsx
 │   ├── design-system/page.tsx # Tokens + sidebar conventions summary; canonical detail in `.cursor/rules/design-system.mdc`
 │   ├── iam/page.tsx        # IAM module sub-dashboard (links to utilities)
@@ -261,16 +264,27 @@ Target: single operator managing secrets, Amplify env configuration, access find
 
 - Analyzer + CloudTrail behavior unchanged in `lib/aws/analyzer.ts` and `lib/aws/cloudtrail.ts`.
 
+## Dashboard
+
+- `/` is **Needs attention**: hero = exception row total; supporting GitHub failed/live, secrets hygiene (union), Fly unhealthy (`degraded`/`down`). One exception list (cap 15). No tool directory.
+- Builders: [`lib/dashboard/exceptions.ts`](lib/dashboard/exceptions.ts). Redirects: [`lib/dashboard/legacy-redirect.ts`](lib/dashboard/legacy-redirect.ts).
+- `/aws` → `/`. `/github/overview` → `/github`. AWS sidebar header is expand-only.
+- URL filters: home `?source=github|secrets|fly`; secrets chips/insight tiles and `?mode=values` sync `filter` in the URL.
+- GitHub data fetches once on home; live polling only under `/github` (`GitHubDataProvider` smart polling). Home is no longer a tool directory.
+- Composition methodology: [`.cursor/skills/dashboard-design/`](.cursor/skills/dashboard-design/).
+
 ## Secrets UI
 
 - List, search, detail, bulk edit, value editor — uses `useData()` for secrets list.
 - Secret detail page (`app/secrets/[id]/page.tsx`): **Details** panel shows full resource ARN (from list metadata or loaded value) with **Copy ARN**.
+- `/secrets` is browse + insights tiles/triage + `?mode=values` value search. `/secrets/overview` and `/secrets/search` redirect.
+- `/secrets/[id]` detail unchanged.
 
 ## Amplify UI
 
-- [`app/amplify/page.tsx`](app/amplify/page.tsx): lists Gen 1 Amplify apps in the workspace region/profile.
+- [`app/amplify/page.tsx`](app/amplify/page.tsx): lists Gen 1 Amplify apps in the workspace region/profile; env search lives in `?mode=search` on the same page (`/amplify/search` redirects there).
 - [`app/amplify/[appId]/page.tsx`](app/amplify/[appId]/page.tsx): app detail with branches; edit app-level and per-branch environment variables (`components/amplify/env-vars-editor.tsx`, bulk modal).
-- [`app/amplify/search/page.tsx`](app/amplify/search/page.tsx): POST to `/api/amplify/search` to find env keys/values across apps and branches.
+- [`app/amplify/search/page.tsx`](app/amplify/search/page.tsx): legacy redirect to `/amplify?mode=search` (query forwarded).
 
 ## IAM UI
 
@@ -288,11 +302,6 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - [`app/route53/fly-domains/page.tsx`](app/route53/fly-domains/page.tsx) — table of Fly apps with pending/failed cert highlight; preview/apply modal.
 - API: `GET /api/fly/domains`, `GET /api/fly/apps/[app]/certs/[hostname]`, `GET /api/route53/hosted-zones`, `POST /api/route53/fly-domains/preview`, `POST /api/route53/fly-domains/apply`.
 - Plan pack: [`docs/plans/fly-route53-domains/`](docs/plans/fly-route53-domains/).
-
-## Dashboard
-
-- Secrets-only metrics: counts, rotation coverage, tags, stale secrets, triage links.
-- Composition methodology for new/redesigned dashboards: [`.cursor/skills/dashboard-design/`](.cursor/skills/dashboard-design/) (Excited-agency principles; does not replace Flightdeck tokens).
 
 ## Gotchas
 
