@@ -177,7 +177,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | `@aws-sdk/client-sts` | GetCallerIdentity / account id |
 | `@aws-sdk/credential-providers` | `fromIni` for named profiles on API routes |
 | `pg` | Optional Postgres for [`lib/cache.ts`](lib/cache.ts) when `DATABASE_URL` is set |
-| `next` 16.2.3 | App Router |
+| `next` 16.3.4 | App Router; `allowedDevOrigins` includes `127.0.0.1` for Electron/`electron:dev`; `agentRules: false` so Next does not rewrite `AGENTS.md` |
 
 ## API Surface (current)
 
