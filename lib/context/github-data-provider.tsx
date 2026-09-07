@@ -186,7 +186,10 @@ function GithubDataController() {
   controllerActions.notifyMutation = notifyMutation;
 
   useEffect(() => {
-    if (!pathname.startsWith("/github")) {
+    const onHome = pathname === "/";
+    const onGithub = pathname.startsWith("/github");
+
+    if (!onHome && !onGithub) {
       abortRef.current?.abort();
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -235,7 +238,7 @@ function GithubDataController() {
 }
 
 /**
- * Renders a controller that fetches and polls only on `/github/*`.
+ * Fetches once on `/`, and fetches plus smart-polls on `/github/*`.
  * Children do not re-render on GitHub poll — only `useGithubData()` subscribers do.
  */
 export function GithubDataProvider({ children }: { children: React.ReactNode }) {

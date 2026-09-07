@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { EnrichedFlyApp, FlyAppStatus } from "@/lib/fly/types";
 import {
   getFlyOverviewLead,
@@ -79,9 +80,12 @@ export function FlyOverviewClient({
   initialApps: EnrichedFlyApp[];
   initialError: string | null;
 }) {
+  const searchParams = useSearchParams();
+  const focusApp = searchParams.get("app");
   const [apps, setApps] = useState<EnrichedFlyApp[]>(initialApps);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+  const focusedRef = useRef<HTMLDivElement | null>(null);
 
   const fetchApps = useCallback(async () => {
     try {
@@ -103,6 +107,10 @@ export function FlyOverviewClient({
 
   const lead = getFlyOverviewLead();
   const links = getFlyOverviewLinks();
+
+  useEffect(() => {
+    focusedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusApp, apps.length]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-10">
@@ -195,7 +203,12 @@ export function FlyOverviewClient({
               return (
                 <div
                   key={app.name}
-                  className="group rounded-xl border border-(--border-hairline) bg-(--bg-elevated) p-4 shadow-sm transition-colors hover:border-(--success)/30"
+                  ref={app.name === focusApp ? focusedRef : undefined}
+                  className={`group rounded-xl border p-4 shadow-sm transition-colors hover:border-(--success)/30 ${
+                    app.name === focusApp
+                      ? "border-(--accent)/50 ring-2 ring-(--accent)/20"
+                      : "border-(--border-hairline)"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">

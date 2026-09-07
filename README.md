@@ -43,7 +43,6 @@ An **optional** AI sidecar (OpenRouter) can answer questions with read-only tool
 | **IAM** | Search roles/users/policies; **cross-account copy** (target must be a **named** profile); **create user** from a template (console + key) |
 | **GitHub Actions** | Overview, all runs, workflows; re-run, cancel, enable/disable, **workflow_dispatch** (inputs from YAML) |
 | **Fly.io** | App health overview (machines, regions, checks); secrets management (list, set, unset) via `flyctl` |
-| **Agent** (optional) | Chat + tools (registry-gated: secrets, audit, CloudTrail, propose). Requires `OPENROUTER_API_KEY` |
 
 ---
 
@@ -56,7 +55,6 @@ An **optional** AI sidecar (OpenRouter) can answer questions with read-only tool
 - **AWS** credentials (profiles, env, or instance role) for accounts you manage
 - **GitHub CLI** (`gh`) installed and `gh auth login` for Actions/API screens
 - **Fly CLI** (`flyctl` or `fly`) installed and `fly auth login` for Fly.io screens
-- **OpenRouter** API key only if you use the built-in agent
 
 **From source**
 
@@ -90,11 +88,8 @@ npm run start:standalone
 
 | Variable | Purpose |
 | -------- | ------- |
-| `OPENROUTER_API_KEY` | Required for `POST /api/agent/chat` (503 if missing) |
-| `OPENROUTER_MODEL` | Default model id; UI and requests can override |
 | `DATABASE_URL` | Optional Postgres TTL cache for list reads (`lib/cache.ts`) — app works without it |
 | `NEXT_PUBLIC_AWS_PROFILES` | Comma-separated profile **names** for the region/profile UI |
-| `NEXT_PUBLIC_AGENT_ENABLED` | `false` hides the agent in the built app |
 | `AWS_REGION` | Fallback region when the client omits one |
 | `FLIGHTDECK_PORT` / `FLIGHTDECK_ELECTRON_DEV` | Electron shell (`electron/main.cjs`) |
 
@@ -109,7 +104,7 @@ Fly.io does not use a token env var: the server calls `flyctl` directly using th
 
 ```bash
 docker build -t flightdeck .
-docker run --rm -p 3325:3325 -e OPENROUTER_API_KEY=... flightdeck
+docker run --rm -p 3325:3325 flightdeck
 ```
 
 ---
@@ -137,8 +132,8 @@ Typecheck: `npx tsc --noEmit`
 
 ## Documentation
 
-- **[CODEBASE.md](CODEBASE.md)** — API map, DTOs, agent behavior, and gotchas (maintained with substantive code changes)
-- **Module & nav wiring** — `lib/modules/registry.ts` (feature toggles and agent tool groups)
+- **[CODEBASE.md](CODEBASE.md)** — API map, DTOs, and gotchas (maintained with substantive code changes)
+- **Module & nav wiring** — `lib/modules/registry.ts` (feature toggles)
 
 ---
 

@@ -1,17 +1,27 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useData } from "@/lib/context/data-provider";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
 import { relativeTime, daysSince } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FloatingActionBar } from "@/components/floating-action-bar";
+import { InsightsPanel } from "@/components/secrets/insights-panel";
+import { ValueSearchPanel } from "@/components/secrets/value-search-panel";
 import type { SecretEntry } from "@/lib/types";
 import { parseEnvFile } from "@/lib/secret-value-format";
-
-type Filter = "all" | "dev" | "staging" | "prod" | "no-rotation" | "stale";
+import {
+  parseSecretsBrowseFilter,
+  parseSecretsMode,
+  secretsHref,
+  type SecretsBrowseFilter,
+} from "@/lib/secrets/page-url";
+import {
+  isSecretStale,
+  secretsHygieneStats,
+  STALE_DAYS,
+} from "@/lib/dashboard/exceptions";
 
 function deriveEnv(secret: SecretEntry): string {
   if (secret.tags.Environment) return secret.tags.Environment.toLowerCase();
@@ -361,19 +371,77 @@ function CreateSecretModal({
   );
 }
 
-export default function SecretsPage() {
+function SecretsPageContent() {
   const { region, profile } = useAwsWorkspace();
   const { secrets, secretsLoading: loading, secretsError: error, refreshSecrets: refresh, loadSecrets } = useData();
 
   useEffect(() => { loadSecrets(); }, [loadSecrets]);
   const router = useRouter();
+  const params = useSearchParams();
+  const mode = parseSecretsMode(params.get("mode"));
+  const filter = parseSecretsBrowseFilter(params.get("filter"));
+  const lastBrowseFilter = useRef<SecretsBrowseFilter>(filter);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedArn, setCopiedArn] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [nowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (mode === "browse") lastBrowseFilter.current = filter;
+  }, [filter, mode]);
+
+  const handleFilter = useCallback(
+    (nextFilter: SecretsBrowseFilter) => {
+      lastBrowseFilter.current = nextFilter;
+      router.replace(secretsHref({ filter: nextFilter }));
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "R" && event.shiftKey) {
+        const target = event.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+        event.preventDefault();
+        void refresh();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [refresh]);
+
+  const insights = useMemo(() => {
+    const stats = secretsHygieneStats(secrets, nowMs);
+    const rotationEnabled = secrets.filter((secret) => secret.rotationEnabled).length;
+    const rotationPct = secrets.length > 0 ? (rotationEnabled / secrets.length) * 100 : 0;
+    const staleNames = secrets
+      .filter((secret) => isSecretStale(secret, nowMs))
+      .map((secret) => ({
+        name: secret.name,
+        days: daysSince(secret.lastAccessedDate!),
+      }))
+      .sort((a, b) => b.days - a.days)
+      .slice(0, 8);
+
+    return {
+      rotationPct,
+      staleNames,
+      staleCount: stats.stale,
+      unrotatedCount: stats.unrotated,
+    };
+  }, [nowMs, secrets]);
 
   const filtered = useMemo(() => {
     let list = secrets;
@@ -411,14 +479,12 @@ export default function SecretsPage() {
         list = list.filter((s) => !s.rotationEnabled);
         break;
       case "stale":
-        list = list.filter(
-          (s) => s.lastAccessedDate && daysSince(s.lastAccessedDate) > 180,
-        );
+        list = list.filter((s) => isSecretStale(s, nowMs));
         break;
     }
 
     return list;
-  }, [secrets, search, filter]);
+  }, [secrets, search, filter, nowMs]);
 
   function toggleSelect(name: string) {
     setSelected((prev) => {
@@ -498,72 +564,100 @@ export default function SecretsPage() {
     );
   }
 
-  const filters: { key: Filter; label: string }[] = [
+  const filters: { key: SecretsBrowseFilter; label: string }[] = [
     { key: "all", label: "All" },
     { key: "dev", label: "dev" },
     { key: "staging", label: "staging" },
     { key: "prod", label: "prod" },
     { key: "no-rotation", label: "No Rotation" },
-    { key: "stale", label: "Stale >6mo" },
+    { key: "stale", label: `Stale >${STALE_DAYS}d` },
   ];
 
   return (
     <div className="space-y-4">
       <h1 className="font-(family-name:--font-display) text-2xl font-medium text-(--text-primary)">
-        Secrets
+        Secrets Manager
         <span className="ml-2 font-(family-name:--font-mono) text-base text-(--text-muted)">
           ({secrets.length})
         </span>
       </h1>
 
-      <div className="flex items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search secrets..."
-          className="w-64 rounded-md border border-(--border) bg-(--bg-field) px-3 py-1.5 text-sm text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--accent) focus:outline-none"
-        />
-        <div className="flex gap-1">
-          {filters.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                filter === f.key
-                  ? "bg-(--accent) text-white"
-                  : "bg-(--bg-surface) text-(--text-secondary) hover:bg-(--bg-hover)"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      <div className="sticky top-0 z-10 -mx-8 flex flex-wrap items-center gap-3 border-b border-(--border-hairline) bg-(--bg-deep)/90 px-8 py-3 backdrop-blur-sm">
+        {mode === "browse" && (
+          <>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search secrets..."
+              className="w-64 rounded-lg border border-(--border) bg-(--bg-field) px-3 py-1.5 text-sm text-(--text-primary) placeholder:text-(--text-muted) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
+            />
+            <div className="flex flex-wrap gap-1">
+              {filters.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => handleFilter(f.key)}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20 ${
+                    filter === f.key
+                      ? "bg-(--accent) text-white"
+                      : "bg-(--bg-surface) text-(--text-secondary) hover:bg-(--bg-hover)"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/secrets/overview"
-            className="rounded-md border border-(--border) bg-(--bg-elevated) px-3 py-1.5 text-xs font-medium text-(--text-secondary) transition-colors hover:border-(--accent)/40 hover:text-(--accent)"
-          >
-            Workspace insights
-          </Link>
-          <Link
-            href="/secrets/search"
-            className="rounded-md border border-(--accent) px-3 py-1.5 text-xs font-medium text-(--accent) transition-colors hover:bg-(--accent-dim)"
-          >
-            Search values
-          </Link>
           <button
+            type="button"
+            onClick={() =>
+              router.replace(
+                mode === "values"
+                  ? secretsHref({ filter: lastBrowseFilter.current })
+                  : secretsHref({ mode: "values" }),
+              )
+            }
+            className="rounded-lg border border-(--accent) px-3 py-1.5 text-xs font-medium text-(--accent) transition-colors hover:bg-(--accent-dim) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
+          >
+            {mode === "values" ? "Browse" : "Search values"}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 rounded-md bg-(--accent) px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M8 3v10M3 8h10" />
             </svg>
-            Create Secret
+            Create
+          </button>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            title="Refresh (Shift+R)"
+            className="rounded-lg border border-(--border) bg-(--bg-elevated) px-3 py-1.5 text-xs font-medium text-(--text-secondary) hover:bg-(--bg-hover) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20 disabled:opacity-50"
+          >
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-(--border) bg-(--bg-field)">
+      <InsightsPanel
+        total={secrets.length}
+        rotationPct={insights.rotationPct}
+        staleCount={insights.staleCount}
+        unrotatedCount={insights.unrotatedCount}
+        staleNames={insights.staleNames}
+        filter={filter}
+        onFilter={handleFilter}
+      />
+
+      {mode === "browse" ? (
+        <>
+      <div className="overflow-x-auto rounded-xl border border-(--border) bg-(--bg-field)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-(--border) bg-(--bg-surface)">
@@ -733,11 +827,15 @@ export default function SecretsPage() {
           {
             label: "Bulk Edit",
             variant: "accent",
-            onClick: () => router.push("/secrets/search"),
+            onClick: () => router.push(secretsHref({ mode: "values" })),
           },
         ]}
         onClear={() => setSelected(new Set())}
       />
+        </>
+      ) : (
+        <ValueSearchPanel initialQuery={params.get("q") ?? ""} />
+      )}
 
       <ConfirmDialog
         open={deleteTarget !== null}
@@ -756,5 +854,13 @@ export default function SecretsPage() {
         onClose={() => setShowCreateModal(false)}
       />
     </div>
+  );
+}
+
+export default function SecretsPage() {
+  return (
+    <Suspense fallback={<div className="h-24 animate-pulse rounded-xl bg-(--bg-muted)" />}>
+      <SecretsPageContent />
+    </Suspense>
   );
 }

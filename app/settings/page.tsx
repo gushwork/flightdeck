@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, startTransition } from "react";
 import {
   useAwsWorkspace,
   AWS_SAVED_PROFILES_KEY,
@@ -11,17 +11,7 @@ import {
   AWS_REGIONS as REGION_IDS,
   formatRegionMenuLabel,
 } from "@/lib/aws/regions";
-import {
-  DEFAULT_OPENROUTER_MODEL,
-  OPENROUTER_MODEL_STORAGE_KEY,
-} from "@/lib/agent/openrouter-model";
 import { SearchableSelect } from "@/components/searchable-select";
-
-const MODELS = [
-  "anthropic/claude-sonnet-4-6",
-  "openai/gpt-4o",
-  "google/gemini-2.5-pro",
-] as const;
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -59,19 +49,14 @@ export default function SettingsPage() {
     ];
   }, [profile, profileOptions]);
 
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [model, setModel] = useState<string>(DEFAULT_OPENROUTER_MODEL);
-  const [testStatus, setTestStatus] = useState<
-    "idle" | "testing" | "success" | "error"
-  >("idle");
-  const [testMessage, setTestMessage] = useState("");
   const [savedProfilesRaw, setSavedProfilesRaw] = useState("");
 
+  // Hydration-safe: apply localStorage value only after mount so the SSR
+  // render matches the first client render.
   useEffect(() => {
-    setApiKey(localStorage.getItem("openrouter-api-key") ?? "");
-    setModel(localStorage.getItem(OPENROUTER_MODEL_STORAGE_KEY) ?? MODELS[0]);
-    setSavedProfilesRaw(localStorage.getItem(AWS_SAVED_PROFILES_KEY) ?? "");
+    startTransition(() => {
+      setSavedProfilesRaw(localStorage.getItem(AWS_SAVED_PROFILES_KEY) ?? "");
+    });
   }, []);
 
   const commitSavedProfiles = useCallback((value: string) => {
@@ -84,46 +69,6 @@ export default function SettingsPage() {
     notifyAwsProfileListChanged();
   }, []);
 
-  const handleApiKeyChange = useCallback((value: string) => {
-    setApiKey(value);
-    localStorage.setItem("openrouter-api-key", value);
-  }, []);
-
-  const handleModelChange = useCallback((value: string) => {
-    setModel(value);
-    localStorage.setItem(OPENROUTER_MODEL_STORAGE_KEY, value);
-  }, []);
-
-  const testConnection = useCallback(async () => {
-    setTestStatus("testing");
-    setTestMessage("");
-    try {
-      const res = await fetch("/api/agent/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: "Say hello in one word." }],
-          page: "settings",
-          entityId: null,
-          region,
-          profile: profile.trim() || undefined,
-          model: model.trim() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(
-          data?.error ?? `HTTP ${res.status}`,
-        );
-      }
-      setTestStatus("success");
-      setTestMessage("Connection successful");
-    } catch (e) {
-      setTestStatus("error");
-      setTestMessage(e instanceof Error ? e.message : "Connection failed");
-    }
-  }, [region, profile, model]);
-
   const selectClass =
     "w-full rounded-md border border-(--border) bg-(--bg-field) px-3 py-2 text-sm text-(--text-primary) outline-none transition-colors focus:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent)/20";
 
@@ -132,63 +77,6 @@ export default function SettingsPage() {
       <h1 className="font-(family-name:--font-display) text-2xl font-medium text-(--text-primary)">
         Settings
       </h1>
-
-      {/* OpenRouter Configuration */}
-      <section className="space-y-4">
-        <SectionHeading>OpenRouter Configuration</SectionHeading>
-        <div className="rounded-xl border border-(--border) bg-(--bg-field) p-5 space-y-4">
-          <div className="space-y-1.5">
-            <FieldLabel>API Key</FieldLabel>
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="sk-or-…"
-                className={`${selectClass} pr-16`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-(--text-muted) transition-colors hover:text-(--text-secondary)"
-              >
-                {showKey ? "Hide" : "Show"}
-              </button>
-            </div>
-            <p className="text-[11px] text-(--text-muted)">
-              Stored in browser localStorage. Set OPENROUTER_API_KEY in
-              .env.local for server-side use.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <FieldLabel>Model</FieldLabel>
-            <SearchableSelect
-              value={model}
-              onValueChange={handleModelChange}
-              className={selectClass}
-              searchPlaceholder="Search models…"
-              options={MODELS.map((m) => ({ value: m, label: m }))}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={testConnection}
-              disabled={testStatus === "testing"}
-              className="rounded-md bg-(--accent) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {testStatus === "testing" ? "Testing…" : "Test Connection"}
-            </button>
-            {testStatus === "success" && (
-              <span className="text-xs text-(--success)">{testMessage}</span>
-            )}
-            {testStatus === "error" && (
-              <span className="text-xs text-(--danger)">{testMessage}</span>
-            )}
-          </div>
-        </div>
-      </section>
 
       <hr className="border-(--border)" />
 
@@ -269,19 +157,16 @@ export default function SettingsPage() {
         <SectionHeading>Data Privacy</SectionHeading>
         <div className="rounded-xl border border-(--border) bg-(--bg-field) p-5">
           <ul className="space-y-3">
-            <PrivacyItem variant="warn">
-              Policy documents, entity names, and tags <strong>are</strong> sent
-              to OpenRouter for agent analysis
+            <PrivacyItem variant="success">
+              All data stays local — requests go only to AWS, GitHub, and Fly
+              APIs using your own credentials
             </PrivacyItem>
             <PrivacyItem variant="success">
-              Secret values are <strong>never</strong> sent to OpenRouter
+              Secret values are held in server memory only and never written to
+              disk
             </PrivacyItem>
             <PrivacyItem variant="success">
-              All secret values are held in server memory only and never written
-              to disk
-            </PrivacyItem>
-            <PrivacyItem variant="success">
-              No data is sent to any service other than OpenRouter and AWS
+              No data is sent to any third-party LLM or analytics service
             </PrivacyItem>
           </ul>
         </div>

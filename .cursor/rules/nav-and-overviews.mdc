@@ -12,17 +12,17 @@ When you add, rename, or remove **routes**, **nav labels**, or **tool entry poin
 | Surface | File(s) |
 |---------|---------|
 | **Sidenav** (order, labels, `href`s, children) | [`lib/modules/registry.ts`](lib/modules/registry.ts) — `MODULE_NAV`, `SIDEBAR_SERVICE_GROUPS`, `ModuleId` if new module. Sidebar reads this; do not add parallel link lists in [`components/layout/sidebar.tsx`](components/layout/sidebar.tsx) except icons. |
-| **App dashboard** (`/`) — “All tools” directory + platform spotlights | [`lib/modules/overview-directory.ts`](lib/modules/overview-directory.ts) — `DIRECTORY_GROUPS` (consumed by [`components/dashboard/service-directory.tsx`](components/dashboard/service-directory.tsx) and [`components/dashboard/platform-spotlights.tsx`](components/dashboard/platform-spotlights.tsx)). |
-| **AWS service overview** (`/aws`) | Same — `getAwsOverviewLead()` / `getAwsOverviewSubsections()` in `overview-directory.ts`. |
-| **GitHub service overview** (`/github/overview`) | Same — data for the GitHub group in `DIRECTORY_GROUPS`. |
+| **App dashboard** (`/`) | Needs attention inbox — `components/dashboard/needs-attention.tsx`. Not a tool directory. |
+| **AWS** | No hub page. Sidebar header is expand-only. Tools from `MODULE_NAV`. |
+| **GitHub hub** | `/github` (Actions). Do not add `/github/overview`. |
 | **Design system** (`/design-system`) | Short operator-facing summary of tokens and sidebar conventions; linked from Settings. Authoritative class/pattern lists live in [`design-system.mdc`](./design-system.mdc). |
 
-`overview-directory.ts` is documented as aligning with `MODULE_NAV`; **labels and `href`s must match** the registry after changes.
+Fly overview links live in `overview-directory.ts`; **labels and `href`s must match** the registry after changes.
 
 ## Checklist (routes / nav / modules)
 
 1. **Registry** — Update `MODULE_NAV` (and `SIDEBAR_SERVICE_GROUPS` / `ModuleId` if the module or tier changes).
-2. **Overview directory** — Update the matching subsection under `DIRECTORY_GROUPS` so home, `/aws`, and `/github/overview` stay accurate.
+2. **Fly overview** — Update the Fly helpers in `overview-directory.ts` when Fly links change.
 3. **Module-only overview pages** — e.g. [`app/secrets/overview/page.tsx`](app/secrets/overview/page.tsx): if copy or links should reflect new tools, update that page too.
 4. **Shell context** — If the path is a new top-level area, extend [`components/layout/shell.tsx`](components/layout/shell.tsx) (`derivePageContext`, `deriveBreadcrumb`) so breadcrumbs and agent context stay correct.
 5. **Codebase map** — Per [`codebase-knowledge.mdc`](codebase-knowledge.mdc), note new routes or nav in [`CODEBASE.md`](CODEBASE.md).

@@ -48,3 +48,35 @@ export interface FlySecret {
 
 /** App list row with optional status from `getAppsStatus` (Fly overview). */
 export type EnrichedFlyApp = FlyApp & { status_detail: FlyAppStatus | null };
+
+export type FlyCertStatus = "ready" | "pending" | "failed" | "unknown";
+
+export interface FlyCertSummary {
+  hostname: string;
+  status: FlyCertStatus;
+  clientStatus?: string;
+  dnsConfigured?: boolean;
+}
+
+export interface FlyAppDomainRow {
+  appName: string;
+  org: string;
+  defaultHostname: string;
+  certs: FlyCertSummary[];
+  needsAttention: boolean;
+}
+
+export interface FlyDnsRecordInstruction {
+  name: string;
+  type: "A" | "AAAA" | "CNAME" | "TXT";
+  value: string;
+  ttl?: number;
+}
+
+export interface FlyCertCheckResult {
+  hostname: string;
+  status: FlyCertStatus;
+  clientStatus?: string;
+  dnsConfigured?: boolean;
+  dnsRecords: FlyDnsRecordInstruction[];
+}

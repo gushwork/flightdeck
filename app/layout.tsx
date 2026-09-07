@@ -3,7 +3,6 @@ import { DM_Sans, Fraunces, IBM_Plex_Mono } from "next/font/google";
 import { Shell } from "@/components/layout/shell";
 import { AwsWorkspaceProvider } from "@/lib/context/aws-workspace-provider";
 import { DataProvider } from "@/lib/context/data-provider";
-import { ChatProvider } from "@/lib/context/chat-provider";
 import { GithubDataProvider } from "@/lib/context/github-data-provider";
 import "./globals.css";
 
@@ -39,15 +38,13 @@ export default function RootLayout({
       className={`${fraunces.variable} ${dmSans.variable} ${ibmPlexMono.variable}`}
     >
       <body className="min-h-screen overflow-hidden antialiased">
-        <ChatProvider>
-          <AwsWorkspaceProvider>
-            <DataProvider>
-              <GithubDataProvider>
-                <Shell>{children}</Shell>
-              </GithubDataProvider>
-            </DataProvider>
-          </AwsWorkspaceProvider>
-        </ChatProvider>
+        <AwsWorkspaceProvider>
+          <DataProvider>
+            <GithubDataProvider>
+              <Shell>{children}</Shell>
+            </GithubDataProvider>
+          </DataProvider>
+        </AwsWorkspaceProvider>
       </body>
     </html>
   );

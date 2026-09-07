@@ -106,7 +106,6 @@ export const SearchableSelect = React.forwardRef<
         setOpen(o);
         if (!o) searchInputRef.current = null;
       }}
-      modal
     >
       {name ? (
         <input type="hidden" name={name} value={value} readOnly aria-hidden />
@@ -170,14 +169,14 @@ export const SearchableSelect = React.forwardRef<
           shouldFilter={showSearch}
           filter={showSearch ? filterFn : () => 1}
           className={cn(
-            "max-h-[min(320px,50vh)]",
+            "flex max-h-[min(320px,50vh)] flex-col overflow-hidden",
             variant === "panel" && "bg-(--bg-elevated)",
           )}
         >
           {showSearch ? (
             <div
               className={cn(
-                "relative border-b border-(--border-subtle)",
+                "relative shrink-0 border-b border-(--border-subtle)",
                 variant === "panel" && "bg-(--bg-muted)/40",
               )}
             >
@@ -205,7 +204,13 @@ export const SearchableSelect = React.forwardRef<
               />
             </div>
           ) : null}
-          <CommandList id={listboxId} className="py-1">
+          <CommandList
+            id={listboxId}
+            className={cn(
+              "min-h-0 flex-1 py-1",
+              showSearch && "max-h-[min(280px,calc(50vh-2.5rem))]",
+            )}
+          >
             <CommandEmpty className="px-3 py-6 text-center text-sm text-(--text-muted)">
               {emptyText}
             </CommandEmpty>
