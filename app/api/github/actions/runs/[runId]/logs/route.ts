@@ -16,7 +16,12 @@ export async function GET(
       return NextResponse.json({ error: "Missing repo parameter" }, { status: 400 });
     }
 
-    const logsUrl = await getRunLogsUrl(repoFullName, Number(runId));
+    const id = Number(runId);
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json({ error: "Invalid runId" }, { status: 400 });
+    }
+
+    const logsUrl = await getRunLogsUrl(repoFullName, id);
     return NextResponse.json({ url: logsUrl });
   } catch (err) {
     return NextResponse.json(

@@ -20,6 +20,8 @@ const POLL_ACTIVE_MS = 8_000;
 const POLL_RECENT_FAIL_MS = 15_000;
 const POLL_IDLE_MS = 60_000;
 const POLL_AFTER_MUTATION_MS = 5_000;
+/** Skip the on-enter fetch when the store was refreshed this recently. */
+const FRESH_MS = 5_000;
 
 function computePollInterval(runs: GHWorkflowRun[]): number {
   const hasActive = runs.some(
@@ -88,7 +90,8 @@ function GithubDataController() {
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
-  const loadingRef = useRef(false);
+  /** Monotonic request id — only the latest request may write to the store. */
+  const requestIdRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mutationPendingRef = useRef(false);
@@ -98,8 +101,9 @@ function GithubDataController() {
   const doFetch = useCallback(
     async (signal: AbortSignal | undefined, options: { background?: boolean } = {}) => {
       const background = options.background ?? false;
-      if (loadingRef.current) return;
-      loadingRef.current = true;
+      // A newer request supersedes older ones (callers abort the previous controller).
+      const requestId = ++requestIdRef.current;
+      const isCurrent = () => requestIdRef.current === requestId && !signal?.aborted;
       if (!background) {
         setGithubDataLoading(true);
       }
@@ -107,7 +111,7 @@ function GithubDataController() {
 
       try {
         const res = await fetch("/api/github/actions/runs", { signal });
-        if (signal?.aborted) return;
+        if (!isCurrent()) return;
         const data = (await res.json()) as {
           runs?: GHWorkflowRun[];
           summary?: GHRunsSummary;
@@ -115,6 +119,7 @@ function GithubDataController() {
           workflows?: string[];
           error?: string;
         };
+        if (!isCurrent()) return;
         if (data.error) throw new Error(data.error);
 
         const newRuns = data.runs ?? [];
@@ -125,13 +130,12 @@ function GithubDataController() {
           workflows: data.workflows ?? [],
         });
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
+        if ((err as Error).name === "AbortError" || !isCurrent()) return;
         setGithubDataFetchError(
           err instanceof Error ? err.message : "Failed to fetch runs",
         );
       } finally {
-        loadingRef.current = false;
-        if (!background) {
+        if (!background && requestIdRef.current === requestId) {
           setGithubDataLoading(false);
         }
       }
@@ -185,11 +189,13 @@ function GithubDataController() {
   controllerActions.refresh = refresh;
   controllerActions.notifyMutation = notifyMutation;
 
-  useEffect(() => {
-    const onHome = pathname === "/";
-    const onGithub = pathname.startsWith("/github");
+  // Key the fetch/poll lifecycle on the section, not the full pathname, so moving
+  // between /github/* pages keeps the running poll instead of refetching each time.
+  const section: "home" | "github" | "other" =
+    pathname === "/" ? "home" : pathname.startsWith("/github") ? "github" : "other";
 
-    if (!onHome && !onGithub) {
+  useEffect(() => {
+    if (section === "other") {
       abortRef.current?.abort();
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -199,9 +205,13 @@ function GithubDataController() {
     }
 
     const controller = new AbortController();
+    abortRef.current?.abort();
     abortRef.current = controller;
+    const fetchedAt = getGithubDataSnapshot().fetchedAt;
+    const isFresh = fetchedAt !== null && Date.now() - new Date(fetchedAt).getTime() < FRESH_MS;
     void (async () => {
-      await doFetch(controller.signal, { background: false });
+      // Data from a moment ago (e.g. home → /github) is reused; polling continues from it.
+      if (!isFresh) await doFetch(controller.signal, { background: fetchedAt !== null });
       if (controller.signal.aborted) return;
       if (pathnameRef.current.startsWith("/github")) {
         scheduleNext.current();
@@ -232,7 +242,7 @@ function GithubDataController() {
       }
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [pathname, doFetch]);
+  }, [section, doFetch]);
 
   return null;
 }

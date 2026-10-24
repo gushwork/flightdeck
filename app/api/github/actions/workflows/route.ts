@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  fetchAllWorkflowsFast,
+  listAllWorkflowsCached,
+  invalidateWorkflowsCache,
   dispatchWorkflow,
   enableWorkflow,
   disableWorkflow,
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const repoFilter = searchParams.get("repo");
 
-    const allWorkflows = await fetchAllWorkflowsFast(30);
+    const allWorkflows = await listAllWorkflowsCached(30);
     const filtered = repoFilter
       ? allWorkflows.filter((w) => w.repoFullName === repoFilter)
       : allWorkflows;
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 
+    invalidateWorkflowsCache();
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(
