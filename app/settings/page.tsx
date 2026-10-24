@@ -12,6 +12,7 @@ import {
   formatRegionMenuLabel,
 } from "@/lib/aws/regions";
 import { SearchableSelect } from "@/components/searchable-select";
+import { RunnerVmSettings } from "@/components/settings/runner-vm-settings";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -152,6 +153,14 @@ export default function SettingsPage() {
 
       <hr className="border-(--border)" />
 
+      {/* Runner VM */}
+      <section className="space-y-4">
+        <SectionHeading>Runner VM</SectionHeading>
+        <RunnerVmSettings />
+      </section>
+
+      <hr className="border-(--border)" />
+
       {/* Data Privacy */}
       <section className="space-y-4">
         <SectionHeading>Data Privacy</SectionHeading>
@@ -159,7 +168,7 @@ export default function SettingsPage() {
           <ul className="space-y-3">
             <PrivacyItem variant="success">
               All data stays local — requests go only to AWS, GitHub, and Fly
-              APIs using your own credentials
+              APIs, plus SSH to your runner VM, using your own credentials
             </PrivacyItem>
             <PrivacyItem variant="success">
               Secret values are held in server memory only and never written to

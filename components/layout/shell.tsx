@@ -5,22 +5,39 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { useData } from "@/lib/context/data-provider";
 import { showAwsWorkspaceSelectors } from "@/lib/nav/aws-workspace-topbar";
+import {
+  BreadcrumbProvider,
+  useBreadcrumbOverride,
+  type BreadcrumbItem,
+} from "@/lib/nav/breadcrumb-context";
 
-function deriveBreadcrumb(pathname: string): string[] {
-  if (pathname === "/") return ["Needs attention"];
+const BREADCRUMB_LABELS: Record<string, string> = { vpc: "VPC" };
+
+function deriveBreadcrumb(pathname: string): BreadcrumbItem[] {
+  if (pathname === "/") return [{ label: "Needs attention" }];
   const segments = pathname.split("/").filter(Boolean);
-  return segments.map(
-    (s) =>
+  return segments.map((s) => ({
+    label:
+      BREADCRUMB_LABELS[s] ??
       decodeURIComponent(s).charAt(0).toUpperCase() +
-      decodeURIComponent(s).slice(1),
-  );
+        decodeURIComponent(s).slice(1),
+  }));
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <BreadcrumbProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </BreadcrumbProvider>
+  );
+}
+
+function ShellFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { secrets } = useData();
+  const override = useBreadcrumbOverride();
 
-  const breadcrumb = deriveBreadcrumb(pathname);
+  const breadcrumb = override ?? deriveBreadcrumb(pathname);
   const showWorkspaceSelectors = showAwsWorkspaceSelectors(pathname);
 
   return (

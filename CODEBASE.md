@@ -10,13 +10,13 @@
 
 ## Project Overview
 
-Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management. The AI chat agent was **removed** (2026-08-25); all data flows only to AWS/GitHub/Fly APIs with local credentials.
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, VPC multi-view explorer (read-only), IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management. The AI chat agent was **removed** (2026-08-25); all data flows only to AWS/GitHub/Fly APIs with local credentials.
 
 Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
 
 ## Module registry
 
-- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Route 53**, **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups.
+- [`lib/modules/registry.ts`](lib/modules/registry.ts) — toggles **Secrets**, **Amplify**, **Audit** (Access Analyzer), **Route 53**, **VPC**, **Utility** (IAM tools), **GitHub**, **Fly.io**, and **Settings** nav; optional `NavItemDef.children` for collapsible groups.
 
 ## Directory Structure
 
@@ -55,6 +55,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │       ├── amplify.ts      # ListApps, app snapshot, branch env, search env vars, UpdateApp/UpdateBranch env
 │       ├── iam.ts          # IAM search, exists, copy (roles/users/customer-managed policies), create-user (console access + keys + permission cloning from template); ListUsers, CreateLoginProfile, CreateAccessKey, password policy handling, sign-in URL generation
 │       ├── sts.ts          # getAccountId via GetCallerIdentity
+│       ├── vpc.ts          # EC2: listVpcs — account-wide Describe* once, grouped per VPC (subnets, RTs, IGW/EIGW, NAT, endpoints, instances, ENIs, SGs, NACLs, peering, TGW, VGW, flow logs, DHCP); optional calls degrade to `warnings`; merges vpc-services.ts results
+│       ├── vpc-services.ts # ELBv2 (listeners/rules/target health), RDS, Lambda (SWR cache + 3s budget → `pending`), ElastiCache, ECS; drain/optional helpers; header rule values masked
 │       ├── analyzer.ts
 │       └── cloudtrail.ts
 ├── lib/github/
@@ -75,6 +77,22 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── secrets-bulk.ts     # Multi-target mutation orchestration
 │   ├── secrets-dependabot.ts / secrets-codespaces.ts # Wave 3 platform fetchers
 │   └── secrets-platform-registry.ts # PLATFORM_FETCHERS plugin list for indexer
+├── lib/runner/
+│   ├── types.ts            # Client-safe RunnerSnapshot / RunnerJob / RunnerConfigView DTOs
+│   ├── config.ts           # Server-only: host/user from Settings file (`~/.flightdeck/runner-vm.json`) > env / `.env.azure`; validation; `configView()` (tested in config.test.ts)
+│   ├── parse.ts            # Pure: pairs Runner-log events with Worker-log metadata by planId → jobs, state, stats (tested in parse.test.ts)
+│   ├── remote-script.ts    # Read-only python3 snapshot script piped to the VM over `ssh … python3 -`
+│   └── ssh.ts              # Server-only: ssh + SSH_ASKPASS password auth, 4s shared cache (`clearRunnerCache`)
+├── lib/vpc/                # Client-safe, pure (unit-tested: *.test.ts)
+│   ├── types.ts            # VpcDetail + subnet/RT/SG/NACL/ENI/peering/load balancer/service DTOs, VpcCoverage, VpcFinding, VpcViewId
+│   ├── cidr.ts             # IPv4 CIDR math: parse/normalise, overlap, freeBlocks, freeBlocksOfSize
+│   ├── routing.ts          # classifyTier (public/private/isolated), resolveRoute (longest prefix, link-local), describeTarget
+│   ├── eni.ts              # classifyEni — owning service from ENI type/description (ALB/NLB, RDS, Lambda, ECS…)
+│   ├── review.ts           # reviewVpc design/hygiene findings (incl. LB/RDS/ECS/cache/Lambda), scoreOf (per-rule diminishing), gradeOf, worldRisk
+│   ├── resources.ts        # buildResourceRows (real services first; ENI guesses only when a service API was unreadable), rowsToCsv, KIND_LABEL, lbHealth
+│   ├── planner.ts          # buildCells (≤256-cell address map), suggestLayout (tier × AZ first-fit)
+│   ├── links.ts            # consoleUrl deep links into the AWS console
+│   └── export.ts           # vpcToMarkdown, downloadText
 ├── lib/fly/
 │   ├── types.ts            # FlyApp, FlyAppStatus, FlyMachine, MachineCheck, FlySecret DTOs (client-safe)
 │   └── cli.ts              # flyctl binary resolution (flyctl → fly), execFile JSON helpers, listApps, getAppStatus, getAppsStatus (bounded concurrency), listSecrets, setSecrets (stdin import), unsetSecrets
@@ -94,6 +112,16 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   │   ├── use-run-mutations.ts # Hook: rerun/rerunFailed/cancel with optimistic updates and error handling
 │   │   ├── workflow-badge-image.tsx # Workflow status SVG from badge_url; https guard + onError hide
 │   │   └── workflow-drawer.tsx  # Slide-over: overview (stats, last run, badge), runs (event/conclusion, re-run failed), YAML; Actions URL + file URL; collapsible dispatch w/ feedback
+│   ├── vpc/
+│   │   ├── vpc-provider.tsx    # VpcProvider/useVpcs: one fetch shared by list + detail (layout-scoped), stale-guarded, focus revalidate, re-polls while `pending`
+│   │   ├── vpc-list.tsx        # /vpc: totals, overlap banner, VPC cards with health ring + mini tier×AZ map
+│   │   ├── vpc-detail.tsx      # /vpc/[vpcId]: header, stats, ?view= tabs (9), breadcrumbs, shortcuts (1–9, /, r, ?, Esc), ?res= drawer
+│   │   ├── lb-view.tsx         # Load balancers: listener → rule → target group → target health tracing
+│   │   ├── resource-drawer.tsx # Slide-over details for any resource row; links to topology/security/LB views
+│   │   ├── topology-view.tsx   # Tier × AZ matrix, IGW flow line, gap cells, related-RT ring + inspector.tsx side panel
+│   │   ├── resources-view.tsx / subnets-view.tsx / routing-view.tsx (route tester) / security-view.tsx
+│   │   ├── connectivity-view.tsx / planner-view.tsx (address map, free blocks, CIDR check, layout) / review-view.tsx
+│   │   └── health-ring.tsx, refresh-control.tsx, ui.tsx (Chip, CopyId, CountUp, UtilBar, ConsoleLink…)
 │   ├── amplify/
 │   │   ├── env-vars-editor.tsx
 │   │   └── amplify-env-bulk-modal.tsx
@@ -120,10 +148,14 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── amplify/[appId]/page.tsx  # App detail + per-branch env editing
 │   ├── secrets/...
 │   ├── analyzer/page.tsx
+│   ├── vpc/layout.tsx             # Mounts VpcProvider so list ↔ detail navigation is instant
+│   ├── vpc/page.tsx               # VPC list
+│   ├── vpc/[vpcId]/page.tsx       # VPC detail (multi-view via ?view=)
 │   ├── github/
 │   │   ├── page.tsx            # Actions summary dashboard: stat ribbon (in-progress/queued/24h-success/24h-failed), active runs, recent failures, health bars; j/k/1/2 keyboard nav
 │   │   ├── runs/page.tsx       # All-runs card grid: filterable (status/repo/workflow/branch), URL-synced, 2D arrow-key nav, dispatch trigger
 │   │   ├── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
+│   │   ├── runner/page.tsx     # Azure VM self-hosted runner: live state (busy/idle/offline), VM stats, job history from runner _diag logs; smart polling (8s busy / 15s idle, paused when hidden)
 │   │   └── secrets/page.tsx    # Secrets hub: inventory dashboard, filters, repo drawer, drift audit, bulk edit
 │   ├── fly/
 │   │   ├── overview/page.tsx   # Fly app health grid: machines, regions, checks, deploy time; links to secrets and Fly dashboard
@@ -202,6 +234,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/iam/users?region=&profile=` | List IAM usernames in current account/profile |
 | POST | `/api/iam/create-user` | Body: `region`, optional `profile`, `newUserName`, `templateUserName`, optional `includeGroups` — creates user, copies permissions from template, adds console password (PasswordResetRequired=true), access key; returns sign-in URL + credentials |
 | GET | `/api/iam/whoami?region=&profile=` | Returns `accountId` for labels |
+| GET | `/api/vpc?region=&profile=` | `{ vpcs: VpcDetail[], warnings, pending }` — read-only detail for every VPC in the region incl. load balancers, RDS/Lambda/ElastiCache/ECS, `findings`/`score` |
 | GET | `/api/github/repos` | List all repos the authenticated gh CLI user can access |
 | GET | `/api/github/actions/runs?status=&repo=` | List workflow runs across repos (batched, 30/repo); computed summary |
 | POST | `/api/github/actions/runs` | Body: `action` (rerun\|rerun-failed\|cancel), `repoFullName`, `runId` |
@@ -211,6 +244,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/github/actions/workflows/list?repo=` | Fast workflow list: capped repos, parallel, timeouts; card grid fields only |
 | GET | `/api/github/actions/workflows/detail?repo=&workflowId=` | Full workflow detail: metadata + 15 recent runs + YAML file content (parallel) |
 | GET | `/api/github/actions/workflows/dispatch-schema?repo=&workflowId=` | Parses workflow YAML for `workflow_dispatch.inputs`; returns `suggestedRef` (default branch) |
+| GET | `/api/github/runner` | Azure VM runner snapshot read over SSH: `{ snapshot }` (state, supervisor, VM stats, current job, job history) or `{ error }` with 502 |
+| GET/PUT | `/api/github/runner/config` | Runner VM host/user: GET returns `{ config }` (saved overrides, effective values + source, `hasPassword`; never the password); PUT `{ host?, user? }` saves to `~/.flightdeck/runner-vm.json` (empty = remove override). PUT requires same-origin `application/json` (else 403) because the host receives the SSH password |
 | GET | `/api/github/secrets/index` | Cached secrets/variables inventory across repos (Postgres TTL or in-memory) |
 | POST | `/api/github/secrets/index` | Force refresh inventory scan |
 | GET | `/api/github/secrets/search` | Filter inventory (`q`, `owner`, `scope`, `platform`, `kind`, `repo`, `environment`) |
@@ -265,6 +300,17 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - [`app/iam/cross-account-copy/page.tsx`](app/iam/cross-account-copy/page.tsx): search (type toggles), target profile select, copy with overwrite dialog when entity exists in target account.
 - [`app/iam/create-user/page.tsx`](app/iam/create-user/page.tsx): form with username input + template user dropdown (populated via `/api/iam/users`), optional group membership, confirmation dialog, success panel showing sign-in URL/credentials with copy buttons.
 
+## VPC UI
+
+- **Read-only.** No AWS writes anywhere in the VPC module (no PATCH route, no Modify*/CreateTags calls).
+- `/vpc` lists VPCs; `/vpc/[vpcId]?view=topology|resources|load-balancers|subnets|routing|security|connectivity|planner|review`. Extra params: `select` (topology subnet), `subnet` (resources filter), `from` (route tester source), `focus` (security group), `lb` (expanded load balancer ARN), `res` (details drawer, any view).
+- **Breadcrumbs**: pages can override the top-bar breadcrumb with `useBreadcrumbs([...])` from [`lib/nav/breadcrumb-context.tsx`](lib/nav/breadcrumb-context.tsx) (provider in `Shell`); items with `href` render as links. VPC detail uses `VPC / <name> / <view>`.
+- **Tiers**: public = default route to `igw-*`; private = default route elsewhere (NAT, TGW…); isolated = no default route. Effective route table = explicit association else main.
+- **Services**: ELBv2, RDS (also DocumentDB/Neptune instances), Lambda, ElastiCache and ECS come from their own APIs; `coverage` says which answered. When one is unreadable, its ENI-derived rows appear marked "inferred". Lambda is cached in-process (10 min SWR) because `ListFunctions` pages 50 at a time; a cold miss returns `pending` and the provider re-polls after 6 s.
+- **Review** is heuristic (open SG ports, default SG in use, flow logs, single AZ, NAT per AZ, subnet exhaustion, endpoint DNS, S3 gateway endpoint, blackholes, unused RTs/SGs/ENIs, CIDR overlap, peering state, plain-HTTP internet ALBs, target health, public/unencrypted/single-AZ RDS, cache TLS, ECS running < desired, single-AZ Lambda). Score = 100 − 15/7/3 per high/medium/low; repeats of one per-resource rule add 25% each, capped at 2×.
+- IAM (read-only): `ec2:Describe*`, `elasticloadbalancing:Describe*`, `rds:DescribeDBInstances`, `lambda:ListFunctions`, `elasticache:DescribeCacheClusters`/`DescribeCacheSubnetGroups`, `ecs:ListClusters`/`ListServices`/`DescribeServices`. Missing ones surface in the warnings banner.
+- Motion classes `.vpc-flow`, `.vpc-pop`, `.vpc-slide`, `.vpc-confetti` live in `app/globals.css` and stop under `prefers-reduced-motion`.
+
 ## Route 53 / Fly domains
 
 - [`lib/domains/types.ts`](lib/domains/types.ts) — client-safe DTOs for hosted zones, DNS change preview/apply.
@@ -275,6 +321,13 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - [`app/route53/fly-domains/page.tsx`](app/route53/fly-domains/page.tsx) — table of Fly apps with pending/failed cert highlight; preview/apply modal.
 - API: `GET /api/fly/domains`, `GET /api/fly/apps/[app]/certs/[hostname]`, `GET /api/route53/hosted-zones`, `POST /api/route53/fly-domains/preview`, `POST /api/route53/fly-domains/apply`.
 - Plan pack: [`docs/plans/fly-route53-domains/`](docs/plans/fly-route53-domains/).
+
+## Azure runner page
+
+- `/github/runner` (nav: GitHub → Runner) shows the self-hosted runner `github-runner-001` (enterprise `gushwork-ai`) on the Azure VM. Runner listener runs under **pm2** (`run-sh`), not systemd — the `actions.runner.*` unit is installed but inactive.
+- One SSH call per refresh runs [`remote-script.ts`](lib/runner/remote-script.ts) (python3, read-only): `ps` for `Runner.Listener` / `Runner.Worker` (worker present = busy), `pm2 jlist`, `/proc`, `~/actions-runner/_diag/Runner_*.log` event lines (`Running job` / `completed with result`) and each `Worker_*.log` job message (`github` context → repo, workflow, run id, event, ref, actor). [`parse.ts`](lib/runner/parse.ts) joins them by plan id.
+- History only covers what the runner still keeps in `_diag` (it prunes old logs) — the page shows the oldest retained job.
+- Config precedence: **Settings → Runner VM** (host/user saved server-side in `~/.flightdeck/runner-vm.json`, override dir with `FLIGHTDECK_CONFIG_DIR`) > `RUNNER_VM_HOST` / `RUNNER_VM_USER` in env or gitignored `.env.azure` (read from the process cwd — Next does not auto-load it) > user default `azureuser`. Host has no default. The password (`VM_PASSWORD` / `RUNNER_VM_PASSWORD`) is env-only and never saved or returned by the API. Host/user are regex-validated before reaching ssh argv. Settings has a "Save & test connection" button (`components/settings/runner-vm-settings.tsx`). Password reaches `ssh` only via `SSH_ASKPASS` env — never argv or disk. Requires an `ssh` binary on the host (not in the Docker image; POSIX only, askpass helper is a `sh` script).
 
 ## Gotchas
 

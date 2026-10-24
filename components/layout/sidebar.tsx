@@ -91,6 +91,13 @@ const icons: Record<NavIconId, React.ReactNode> = {
       <circle cx="13" cy="12" r="1.5" fill="currentColor" />
     </svg>
   ),
+  server: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="2" y="2.5" width="12" height="4.5" rx="1" />
+      <rect x="2" y="9" width="12" height="4.5" rx="1" />
+      <path d="M4.5 4.75h.01M4.5 11.25h.01" />
+    </svg>
+  ),
   gitBranch: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <circle cx="5" cy="4" r="2" />
@@ -165,6 +172,14 @@ const icons: Record<NavIconId, React.ReactNode> = {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <circle cx="8" cy="8" r="6" />
       <path d="M2 8h12M8 2a10 10 0 010 12M8 2a10 10 0 000 12" />
+    </svg>
+  ),
+  network: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="6" y="1.5" width="4" height="3.5" rx="0.75" />
+      <rect x="1.5" y="11" width="4" height="3.5" rx="0.75" />
+      <rect x="10.5" y="11" width="4" height="3.5" rx="0.75" />
+      <path d="M8 5v3M3.5 11V8h9v3" />
     </svg>
   ),
 };
@@ -256,6 +271,7 @@ function routeInAwsSection(pathname: string): boolean {
   if (pathname === "/analyzer" || pathname.startsWith("/analyzer/")) return true;
   if (pathname === "/iam" || pathname.startsWith("/iam/")) return true;
   if (pathname === "/route53" || pathname.startsWith("/route53/")) return true;
+  if (pathname === "/vpc" || pathname.startsWith("/vpc/")) return true;
   return false;
 }
 

@@ -8,5 +8,6 @@ export function showAwsWorkspaceSelectors(pathname: string): boolean {
   if (pathname === "/iam" || pathname.startsWith("/iam/")) return true;
   if (pathname === "/amplify" || pathname.startsWith("/amplify/")) return true;
   if (pathname === "/route53" || pathname.startsWith("/route53/")) return true;
+  if (pathname === "/vpc" || pathname.startsWith("/vpc/")) return true;
   return false;
 }

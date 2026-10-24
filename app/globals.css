@@ -76,3 +76,38 @@ body {
   from { opacity: 0; transform: translateX(-50%) translateY(16px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* VPC dashboard motion — all of it stops under prefers-reduced-motion. */
+@keyframes vpc-flow {
+  to { background-position: 24px 0; }
+}
+@keyframes vpc-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes vpc-slide {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes vpc-confetti {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
+}
+.vpc-flow {
+  height: 2px;
+  background-image: linear-gradient(90deg, var(--accent) 50%, transparent 50%);
+  background-size: 12px 2px;
+  animation: vpc-flow 0.9s linear infinite;
+}
+.vpc-pop {
+  animation: vpc-pop 0.35s ease-out both;
+}
+.vpc-confetti {
+  animation: vpc-confetti 1.1s ease-out forwards;
+}
+.vpc-slide {
+  animation: vpc-slide 0.25s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vpc-flow, .vpc-pop, .vpc-confetti, .vpc-slide { animation: none; }
+}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
 import { SearchableSelect } from "@/components/searchable-select";
+import type { BreadcrumbItem } from "@/lib/nav/breadcrumb-context";
 import {
   AWS_REGIONS as REGION_IDS,
   formatRegionMenuLabel,
@@ -16,7 +17,7 @@ export function Topbar({
   items,
   showWorkspaceSelectors = false,
 }: {
-  items: string[];
+  items: BreadcrumbItem[];
   showWorkspaceSelectors?: boolean;
 }) {
   const { region, setRegion, profile, setProfile, profileOptions } =
@@ -54,19 +55,29 @@ export function Topbar({
         aria-label="Breadcrumb"
       >
         {items.map((item, i) => (
-          <span key={`${item}-${i}`} className="flex items-center gap-1.5">
+          <span key={`${item.label}-${i}`} className="flex min-w-0 items-center gap-1.5">
             {i > 0 && (
               <span className="text-(--text-faint)">/</span>
             )}
-            <span
-              className={
-                i === items.length - 1
-                  ? "truncate font-medium text-(--text-primary)"
-                  : "truncate text-(--text-muted)"
-              }
-            >
-              {item}
-            </span>
+            {item.href && i < items.length - 1 ? (
+              <Link
+                href={item.href}
+                className="truncate text-(--text-muted) transition-colors hover:text-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/20"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span
+                aria-current={i === items.length - 1 ? "page" : undefined}
+                className={
+                  i === items.length - 1
+                    ? "truncate font-medium text-(--text-primary)"
+                    : "truncate text-(--text-muted)"
+                }
+              >
+                {item.label}
+              </span>
+            )}
           </span>
         ))}
       </nav>

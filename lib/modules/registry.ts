@@ -12,7 +12,8 @@ export type ModuleId =
   | "iam"
   | "github"
   | "fly"
-  | "route53";
+  | "route53"
+  | "vpc";
 
 export type NavIconId =
   | "dashboard"
@@ -30,9 +31,11 @@ export type NavIconId =
   | "playCircle"
   | "listRuns"
   | "gitBranch"
+  | "server"
   | "fly"
   | "flySecrets"
   | "globe"
+  | "network"
   | "settings";
 
 /** Sub-links under a collapsible nav row (e.g. IAM utilities under Overview). */
@@ -80,7 +83,7 @@ export const SIDEBAR_SERVICE_GROUPS: SidebarServiceGroup[] = [
   {
     collapsible: true,
     headerModuleId: "platforms",
-    moduleIds: ["secrets", "amplify", "audit", "iam", "route53"],
+    moduleIds: ["secrets", "amplify", "audit", "iam", "route53", "vpc"],
   },
   { moduleIds: ["github"] },
   { moduleIds: ["fly"] },
@@ -154,6 +157,12 @@ export const MODULE_NAV: ModuleNavSection[] = [
     ],
   },
   {
+    id: "vpc",
+    enabled: true,
+    sectionLabel: "",
+    items: [{ href: "/vpc", label: "VPC", icon: "network" }],
+  },
+  {
     id: "github",
     enabled: true,
     sectionLabel: "",
@@ -166,6 +175,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
           { href: "/github", label: "Actions", icon: "playCircle" },
           { href: "/github/runs", label: "All runs", icon: "listRuns" },
           { href: "/github/workflows", label: "Workflows", icon: "gitBranch" },
+          { href: "/github/runner", label: "Runner", icon: "server" },
           { href: "/github/secrets", label: "Secrets", icon: "secrets" },
         ],
       },
