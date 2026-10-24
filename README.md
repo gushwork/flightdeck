@@ -4,7 +4,7 @@
 
 **Local-first AWS, GitHub Actions, and Fly.io control panel** — one UI for secrets, Amplify, IAM, audit, Actions, and Fly app management.
 
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D26-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -50,7 +50,7 @@ An **optional** AI sidecar (OpenRouter) can answer questions with read-only tool
 
 **Prerequisites**
 
-- Node.js **20+**
+- Node.js **26+**
 - **npm** (uses `package-lock.json`)
 - **AWS** credentials (profiles, env, or instance role) for accounts you manage
 - **GitHub CLI** (`gh`) installed and `gh auth login` for Actions/API screens

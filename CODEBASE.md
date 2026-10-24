@@ -278,6 +278,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 
 ## Gotchas
 
+- **CI runners / Node**: Ubuntu jobs in `.github/workflows/ci.yml` and `release.yml` (`docker`, `electron-linux`) use `runs-on: [self-hosted, ubuntu-latest]` — the runner must have both labels. `electron-macos` and `electron-windows` stay on `macos-latest` and `windows-latest`. Actions and the Dockerfile use Node 26 (`node:26-bookworm-slim`).
 - **Profile dropdown hydration**: Saved profile names from `localStorage` are applied after mount so SSR and the first client render match; the list briefly shows env-only options until the transition runs.
 - **Postgres cache**: If `DATABASE_URL` is unset or the DB is unreachable, listing secrets still works; caching is best-effort. Ensure `DATABASE_URL` and network access if you rely on cache for hot paths.
 - **IAM copy**: Target profile must be a named profile (not default chain). Add profiles via Settings / `NEXT_PUBLIC_AWS_PROFILES` / `aws-saved-profiles` in localStorage.
