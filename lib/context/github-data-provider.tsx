@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import type { GHWorkflowRun, GHRunsSummary } from "@/lib/github/types";
 import {
@@ -88,7 +88,6 @@ const controllerActions: {
 function GithubDataController() {
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname;
 
   /** Monotonic request id — only the latest request may write to the store. */
   const requestIdRef = useRef(0);
@@ -143,7 +142,7 @@ function GithubDataController() {
     [],
   );
 
-  scheduleNext.current = () => {
+  const scheduleNextImpl = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     let interval: number;
     if (mutationPendingRef.current) {
@@ -186,8 +185,14 @@ function GithubDataController() {
     void refresh();
   }, [refresh]);
 
-  controllerActions.refresh = refresh;
-  controllerActions.notifyMutation = notifyMutation;
+  // Publish the latest handlers after render (not during it) and before the
+  // fetch effect below runs.
+  useLayoutEffect(() => {
+    pathnameRef.current = pathname;
+    scheduleNext.current = scheduleNextImpl;
+    controllerActions.refresh = refresh;
+    controllerActions.notifyMutation = notifyMutation;
+  });
 
   // Key the fetch/poll lifecycle on the section, not the full pathname, so moving
   // between /github/* pages keeps the running poll instead of refetching each time.
