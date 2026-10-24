@@ -175,7 +175,7 @@ function parseMachineCheck(raw: RawMachineCheck): MachineCheck {
 }
 
 export async function getAppStatus(appName: string): Promise<FlyAppStatus> {
-  const raw = await flyJson<RawStatus>(["status", "-a", appName]);
+  const raw = await flyJson<RawStatus>(["status", "-a", appName], 10_000);
   const machines: FlyMachine[] = (raw.Machines ?? []).map((m) => ({
     id: m.id,
     name: m.name,
@@ -200,7 +200,7 @@ export async function getAppStatus(appName: string): Promise<FlyAppStatus> {
  */
 export async function getAppsStatus(
   appNames: string[],
-  concurrency = 4,
+  concurrency = 8,
 ): Promise<FlyAppStatus[]> {
   const results: FlyAppStatus[] = [];
   const queue = [...appNames];

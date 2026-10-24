@@ -37,54 +37,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [secretsFetchedAt, setSecretsFetchedAt] = useState<string | null>(null);
 
   const lastLoadedWorkspaceRef = useRef<string | null>(null);
-  const secretsLoadingRef = useRef(false);
+  /** Workspace of the in-flight request, if any. */
+  const inFlightWorkspaceRef = useRef<string | null>(null);
+  /** Monotonic request id — only the latest request may write state. */
+  const requestIdRef = useRef(0);
 
-  const loadSecrets = useCallback(async () => {
-    const workspaceKey = `${region}|${profile}`;
-    if (secretsLoadingRef.current) return;
-    if (lastLoadedWorkspaceRef.current === workspaceKey) return;
-    secretsLoadingRef.current = true;
-    setSecretsLoading(true);
-    setSecretsError(null);
-    try {
-      const res = await fetch(buildListUrl(region, profile, false));
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setSecrets(data.secrets);
-      setSecretsFetchedAt(new Date().toISOString());
-      lastLoadedWorkspaceRef.current = workspaceKey;
-    } catch (e) {
-      setSecretsError(
-        e instanceof Error ? e.message : "Failed to load secrets",
-      );
-    } finally {
-      setSecretsLoading(false);
-      secretsLoadingRef.current = false;
-    }
-  }, [region, profile]);
+  const fetchSecrets = useCallback(
+    async (force: boolean) => {
+      const workspaceKey = `${region}|${profile}`;
+      // Dedupe only identical in-flight requests; a workspace switch supersedes the
+      // old request instead of being dropped (which left stale-profile data showing).
+      if (inFlightWorkspaceRef.current === workspaceKey) return;
+      if (!force && lastLoadedWorkspaceRef.current === workspaceKey) return;
+      const requestId = ++requestIdRef.current;
+      inFlightWorkspaceRef.current = workspaceKey;
+      setSecretsLoading(true);
+      setSecretsError(null);
+      try {
+        const res = await fetch(buildListUrl(region, profile, force));
+        const data = await res.json();
+        if (requestIdRef.current !== requestId) return;
+        if (data.error) throw new Error(data.error);
+        setSecrets(data.secrets ?? []);
+        setSecretsFetchedAt(new Date().toISOString());
+        lastLoadedWorkspaceRef.current = workspaceKey;
+      } catch (e) {
+        if (requestIdRef.current !== requestId) return;
+        setSecretsError(
+          e instanceof Error ? e.message : "Failed to load secrets",
+        );
+      } finally {
+        if (requestIdRef.current === requestId) {
+          setSecretsLoading(false);
+          inFlightWorkspaceRef.current = null;
+        }
+      }
+    },
+    [region, profile],
+  );
 
-  const refreshSecrets = useCallback(async () => {
-    const workspaceKey = `${region}|${profile}`;
-    if (secretsLoadingRef.current) return;
-    secretsLoadingRef.current = true;
-    setSecretsLoading(true);
-    setSecretsError(null);
-    try {
-      const res = await fetch(buildListUrl(region, profile, true));
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setSecrets(data.secrets);
-      setSecretsFetchedAt(new Date().toISOString());
-      lastLoadedWorkspaceRef.current = workspaceKey;
-    } catch (e) {
-      setSecretsError(
-        e instanceof Error ? e.message : "Failed to load secrets",
-      );
-    } finally {
-      setSecretsLoading(false);
-      secretsLoadingRef.current = false;
-    }
-  }, [region, profile]);
+  const loadSecrets = useCallback(() => fetchSecrets(false), [fetchSecrets]);
+  const refreshSecrets = useCallback(() => fetchSecrets(true), [fetchSecrets]);
 
   useEffect(() => {
     lastLoadedWorkspaceRef.current = null;
