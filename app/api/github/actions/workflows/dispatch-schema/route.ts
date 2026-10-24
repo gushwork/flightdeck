@@ -17,6 +17,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "invalid workflowId" }, { status: 400 });
     }
 
+    // Repo metadata does not depend on the workflow — fetch it alongside.
+    const repoMetaPromise = githubFetch<{ default_branch: string }>(`/repos/${repo}`);
+    repoMetaPromise.catch(() => {});
+
     let wfPath: string;
     try {
       const wf = await getWorkflow(repo, workflowId);
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     const [repoMeta, file] = await Promise.all([
-      githubFetch<{ default_branch: string }>(`/repos/${repo}`),
+      repoMetaPromise,
       getWorkflowFileContent(repo, wfPath),
     ]);
 

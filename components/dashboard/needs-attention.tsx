@@ -184,7 +184,6 @@ export function NeedsAttentionDashboard() {
 
   const [flyApps, setFlyApps] = useState<EnrichedFlyApp[]>([]);
   const [flyError, setFlyError] = useState<string | null>(null);
-  const [flyLoading, setFlyLoading] = useState(true);
   const [flyFetchedAt, setFlyFetchedAt] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -207,7 +206,6 @@ export function NeedsAttentionDashboard() {
   ]);
 
   const loadFlyApps = useCallback(async (signal?: AbortSignal) => {
-    setFlyLoading(true);
     setFlyError(null);
     try {
       const response = await fetch("/api/fly/apps?status=1", { signal });
@@ -229,8 +227,6 @@ export function NeedsAttentionDashboard() {
       setFlyError(
         error instanceof Error ? error.message : "Failed to load Fly apps",
       );
-    } finally {
-      if (!signal?.aborted) setFlyLoading(false);
     }
   }, []);
 
@@ -290,10 +286,12 @@ export function NeedsAttentionDashboard() {
         : source === "fly"
           ? flySettled
           : githubSettled && secretsSettled && flySettled;
+  // Based on settled data, not loading flags: background refreshes (90s) must not
+  // blank out the "Nothing needs attention" empty state while they run.
   const allSlicesSucceeded =
-    !github.loading &&
-    !secretsLoading &&
-    !flyLoading &&
+    githubHasSuccessfulData &&
+    secretsHaveSuccessfulData &&
+    flyHasSuccessfulData &&
     !github.error &&
     !secretsError &&
     !flyError;

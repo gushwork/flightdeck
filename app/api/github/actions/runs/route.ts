@@ -6,6 +6,7 @@ import {
   rerunFailedJobs,
   cancelWorkflowRun,
 } from "@/lib/github/actions";
+import { invalidateMemo, memoize } from "@/lib/github/client";
 import { computeSummary } from "@/lib/github/types";
 import type { RunStatus } from "@/lib/github/types";
 
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
 
 // Hard cap: the whole GET must complete within this time
 const ROUTE_TIMEOUT_MS = 12_000;
+// Pollers (dashboard, sidebar badge, multiple tabs) share one upstream fetch
+const RUNS_MEMO_TTL_MS = 4_000;
+const RUNS_MEMO_PREFIX = "gh:runs:";
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,12 +43,20 @@ export async function GET(req: NextRequest) {
     };
 
     // Race the fetch against a timeout so the UI never spins indefinitely
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("GitHub data fetch timed out")), ROUTE_TIMEOUT_MS),
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("GitHub data fetch timed out")), ROUTE_TIMEOUT_MS);
+    });
 
-    const data = await Promise.race([fetchData(), timeoutPromise]);
-    return NextResponse.json(data);
+    try {
+      const data = await Promise.race([
+        memoize(`${RUNS_MEMO_PREFIX}${status ?? ""}:${repoFilter ?? ""}`, RUNS_MEMO_TTL_MS, fetchData),
+        timeoutPromise,
+      ]);
+      return NextResponse.json(data);
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to list runs" },
@@ -63,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     const { action, repoFullName, runId } = body;
 
-    if (!action || !repoFullName || !runId) {
+    if (!action || !repoFullName || !Number.isInteger(runId) || runId <= 0) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -81,6 +93,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 
+    invalidateMemo(RUNS_MEMO_PREFIX);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

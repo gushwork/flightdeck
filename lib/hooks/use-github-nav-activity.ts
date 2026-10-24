@@ -27,8 +27,12 @@ export function useGithubNavActivity() {
 
   const hasActiveRuns = activity.inProgress > 0 || activity.queued > 0;
 
+  // `/github/*` is covered by the data provider. Key on the boolean so navigating
+  // between other pages doesn't refetch on every route change.
+  const onGithub = pathname.startsWith("/github");
+
   useEffect(() => {
-    if (pathname.startsWith("/github")) {
+    if (onGithub) {
       return;
     }
 
@@ -62,7 +66,7 @@ export function useGithubNavActivity() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [pathname]);
+  }, [onGithub]);
 
   return { hasActiveRuns, activity };
 }

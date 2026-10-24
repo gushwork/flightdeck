@@ -1,4 +1,5 @@
-import { githubFetch, getGithubToken } from "./client";
+import { githubFetch, getGithubToken, invalidateMemo, memoize } from "./client";
+import { parallelPool } from "./parallel-pool";
 import {
   computeSummary,
   type GHRepo,
@@ -110,12 +111,19 @@ function mapWorkflow(raw: RawWorkflow, repoFullName: string): GHWorkflow {
 
 // ─── Repository functions ─────────────────────────────────────────────────────
 
-/** List the most recently active repos (capped for speed). */
+const REPOS_TTL_MS = 60_000;
+
+/**
+ * List the most recently active repos (capped for speed).
+ * Memoized for 60s — every runs/workflows poll needs it, and the set rarely changes.
+ */
 export async function listUserRepos(limit = 30): Promise<GHRepo[]> {
-  const raw = await githubFetch<RawRepo[]>(
-    `/user/repos?type=all&sort=pushed&per_page=${Math.min(limit, 100)}`,
-  );
-  return (Array.isArray(raw) ? raw : []).slice(0, limit).map(mapRepo);
+  return memoize(`gh:repos:${limit}`, REPOS_TTL_MS, async () => {
+    const raw = await githubFetch<RawRepo[]>(
+      `/user/repos?type=all&sort=pushed&per_page=${Math.min(limit, 100)}`,
+    );
+    return (Array.isArray(raw) ? raw : []).slice(0, limit).map(mapRepo);
+  });
 }
 
 // ─── Workflow functions ───────────────────────────────────────────────────────
@@ -129,9 +137,13 @@ export async function listWorkflows(repoFullName: string): Promise<GHWorkflow[]>
 }
 
 /** List workflows as lightweight list items (for card grid). */
-async function listWorkflowItems(repoFullName: string): Promise<GHWorkflowListItem[]> {
+async function listWorkflowItems(
+  repoFullName: string,
+  timeoutMs?: number,
+): Promise<GHWorkflowListItem[]> {
   const data = await githubFetch<{ workflows: RawWorkflow[] }>(
     `/repos/${repoFullName}/actions/workflows?per_page=100`,
+    { timeoutMs },
   );
   return (data.workflows ?? []).map((w) => ({
     id: w.id,
@@ -156,29 +168,10 @@ export async function fetchAllWorkflowsFast(
   const MAX_TOTAL = 500;
 
   const repos = await listUserRepos(limit);
-  const results: GHWorkflowListItem[] = [];
-
-  async function fetchWithTimeout(repo: GHRepo): Promise<GHWorkflowListItem[]> {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve([]), PER_REPO_TIMEOUT_MS);
-      listWorkflowItems(repo.fullName)
-        .then((wfs) => {
-          clearTimeout(timer);
-          resolve(wfs);
-        })
-        .catch(() => {
-          clearTimeout(timer);
-          resolve([]);
-        });
-    });
-  }
-
-  for (let i = 0; i < repos.length; i += CONCURRENCY) {
-    const batch = repos.slice(i, i + CONCURRENCY);
-    const settled = await Promise.all(batch.map(fetchWithTimeout));
-    for (const wfs of settled) results.push(...wfs);
-    if (results.length >= MAX_TOTAL) break;
-  }
+  const settled = await parallelPool(repos, CONCURRENCY, (repo) =>
+    listWorkflowItems(repo.fullName, PER_REPO_TIMEOUT_MS).catch(() => [] as GHWorkflowListItem[]),
+  );
+  const results = settled.flat();
 
   // active first, then alphabetical
   results.sort((a, b) => {
@@ -188,6 +181,18 @@ export async function fetchAllWorkflowsFast(
   });
 
   return results.slice(0, MAX_TOTAL);
+}
+
+const WORKFLOWS_MEMO_KEY = "gh:workflows:";
+
+/** `fetchAllWorkflowsFast` memoized for 30s; cleared by `invalidateWorkflowsCache`. */
+export function listAllWorkflowsCached(limit = 30): Promise<GHWorkflowListItem[]> {
+  return memoize(`${WORKFLOWS_MEMO_KEY}${limit}`, 30_000, () => fetchAllWorkflowsFast(limit));
+}
+
+export function invalidateWorkflowsCache(): void {
+  invalidateMemo(WORKFLOWS_MEMO_KEY);
+  invalidateMemo("gh:runs:");
 }
 
 // ─── Workflow detail (drawer) ─────────────────────────────────────────────────
@@ -239,7 +244,7 @@ export async function getWorkflowFileContent(
       content?: string;
       encoding?: string;
       size?: number;
-    }>(`/repos/${repoFullName}/contents/${path}`);
+    }>(`/repos/${repoFullName}/contents/${path.split("/").map(encodeURIComponent).join("/")}`);
 
     if (!data.content) return { content: "", truncated: false };
 
@@ -304,6 +309,8 @@ interface ListRunsOptions {
   perPage?: number;
   /** ISO timestamp — only return runs created after this date */
   created?: string;
+  /** Abort the GitHub request after this many ms */
+  timeoutMs?: number;
 }
 
 /** List recent workflow runs for a single repo. */
@@ -317,6 +324,7 @@ export async function listRepoRuns(
 
   const data = await githubFetch<{ workflow_runs: (RawRun & { name: string | null })[] }>(
     `/repos/${repoFullName}/actions/runs?${params.toString()}`,
+    { timeoutMs: options.timeoutMs },
   );
 
   const runs = data.workflow_runs ?? [];
@@ -338,33 +346,16 @@ export async function listAllRuns(
   const CONCURRENCY = 10;
   const PER_REPO_TIMEOUT_MS = 4_000;
   const MAX_TOTAL_RUNS = 200;
-  const results: GHWorkflowRun[] = [];
 
-  // Wrap each repo fetch with a timeout so one slow repo doesn't block everything
-  async function fetchWithTimeout(repo: GHRepo): Promise<GHWorkflowRun[]> {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve([]), PER_REPO_TIMEOUT_MS);
-      listRepoRuns(repo.fullName, options)
-        .then((runs) => {
-          clearTimeout(timer);
-          resolve(runs);
-        })
-        .catch(() => {
-          clearTimeout(timer);
-          resolve([]);
-        });
-    });
-  }
-
-  for (let i = 0; i < repos.length; i += CONCURRENCY) {
-    const batch = repos.slice(i, i + CONCURRENCY);
-    const settled = await Promise.all(batch.map(fetchWithTimeout));
-    for (const runs of settled) {
-      results.push(...runs);
-    }
-    // Stop early if we already have enough runs
-    if (results.length >= MAX_TOTAL_RUNS) break;
-  }
+  // Sliding pool + per-request timeout so one slow repo doesn't block a whole batch.
+  // Every repo is fetched before sorting: stopping early would drop the newest runs
+  // of repos later in the list.
+  const settled = await parallelPool(repos, CONCURRENCY, (repo) =>
+    listRepoRuns(repo.fullName, { ...options, timeoutMs: PER_REPO_TIMEOUT_MS }).catch(
+      () => [] as GHWorkflowRun[],
+    ),
+  );
+  const results = settled.flat();
 
   results.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
@@ -462,8 +453,13 @@ export async function getRunLogsUrl(
       redirect: "manual",
     },
   );
-  const location = res.headers.get("Location") ?? res.url;
-  return location;
+  const location = res.headers.get("Location");
+  if (res.status >= 300 && res.status < 400 && location) return location;
+  if (res.status === 401) throw new Error("GitHub authentication failed. Run `gh auth login` to re-authenticate.");
+  if (res.status === 404 || res.status === 410) {
+    throw new Error("Logs are not available for this run (expired or not found).");
+  }
+  throw new Error(`GitHub API error ${res.status} fetching run logs`);
 }
 
 // Re-export mutation action types for use in route handlers
