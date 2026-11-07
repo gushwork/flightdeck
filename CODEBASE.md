@@ -31,6 +31,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── types.ts            # SecretEntry, SecretSearchResult, SecretValue, Amplify* DTOs
 │   ├── utils.ts
 │   ├── secret-value-format.ts
+│   ├── secret-value-search.ts # findSecretValueMatches — all key/leaf hits (nested paths) for /api/secrets/values
 │   ├── secret-string.ts      # coerceSecretStringForStorage — API create/PUT + lib/aws create/put always store SecretString as UTF-8 text
 │   ├── amplify-env-map.ts    # JSON / .env parsing for Amplify env maps (reuses secret-value-format)
 │   ├── db.ts                 # Optional Postgres pool (DATABASE_URL) for server cache
