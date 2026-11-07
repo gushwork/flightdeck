@@ -1,4 +1,5 @@
 import type { SecretValueMatch } from '@/lib/secret-value-search';
+import type { SecretReplaceChange } from '@/lib/secret-replace';
 
 /* ── Secrets ── */
 
@@ -25,6 +26,17 @@ export interface SecretSearchResult {
   type: string;
   /** Every hit in this secret's value — one per matching JSON key/leaf, or one raw snippet. */
   matches: SecretValueMatch[];
+}
+
+/** `will-change` only from a dry run; `updated` only after the write is confirmed as AWSCURRENT. */
+export type SecretReplaceStatus = 'will-change' | 'updated' | 'no-match' | 'failed';
+
+export interface SecretReplaceResult {
+  name: string;
+  status: SecretReplaceStatus;
+  changes: SecretReplaceChange[];
+  versionId?: string;
+  error?: string;
 }
 
 export interface SecretValue {
