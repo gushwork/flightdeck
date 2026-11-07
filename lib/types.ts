@@ -1,3 +1,5 @@
+import type { SecretValueMatch } from '@/lib/secret-value-search';
+
 /* ── Secrets ── */
 
 export interface SecretEntry {
@@ -21,8 +23,8 @@ export interface SecretSearchResult {
   arn: string;
   environment: string;
   type: string;
-  matchedContext: string;
-  matchedKey?: string;
+  /** Every hit in this secret's value — one per matching JSON key/leaf, or one raw snippet. */
+  matches: SecretValueMatch[];
 }
 
 export interface SecretValue {

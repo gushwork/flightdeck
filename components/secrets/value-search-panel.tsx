@@ -68,6 +68,8 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
   const [searchedQuery, setSearchedQuery] = useState("");
   const [results, setResults] = useState<SecretSearchResult[]>([]);
   const [totalFetched, setTotalFetched] = useState(0);
+  const [totalSecrets, setTotalSecrets] = useState(0);
+  const [unreadable, setUnreadable] = useState<string[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -97,6 +99,8 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
       if (!response.ok || data.error) throw new Error("Search failed");
       setResults(data.results);
       setTotalFetched(data.totalFetched);
+      setTotalSecrets(data.totalSecrets ?? data.totalFetched);
+      setUnreadable(data.unreadable ?? []);
       setElapsed(data.elapsed);
       setSelected(new Set());
     } catch {
@@ -167,6 +171,7 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
             Fetched &amp; indexed{" "}
             <span className="font-(family-name:--font-mono) font-medium text-(--accent)">
               {totalFetched}
+              {totalFetched < totalSecrets ? ` of ${totalSecrets}` : ""}
             </span>{" "}
             secrets in{" "}
             <span className="font-(family-name:--font-mono) font-medium text-(--accent)">
@@ -175,10 +180,24 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
             — values held in-memory only, cleared on exit.
           </div>
 
+          {unreadable.length > 0 && (
+            <details className="rounded-lg border border-(--warn)/20 bg-(--warn-dim) px-4 py-2.5 text-xs text-(--warn)">
+              <summary className="cursor-pointer">
+                {unreadable.length} secret{unreadable.length === 1 ? "" : "s"} couldn’t be read (access
+                or KMS decrypt denied) and weren’t searched.
+              </summary>
+              <ul className="mt-2 space-y-0.5 font-(family-name:--font-mono)">
+                {unreadable.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+
           <div className="space-y-2">
-            {results.map((result, index) => (
+            {results.map((result) => (
               <div
-                key={`${result.arn}-${index}`}
+                key={result.arn}
                 className="rounded-xl border border-(--border-hairline) bg-(--bg-elevated) p-4 shadow-sm transition-colors hover:bg-(--bg-hover)"
               >
                 <div className="flex items-center gap-2">
@@ -195,14 +214,18 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
                   <span className="rounded bg-(--bg-muted) px-1.5 py-0.5 text-[11px] text-(--text-secondary)">
                     {result.type}
                   </span>
-                  {result.matchedKey && (
+                  {result.matches.length > 1 && (
                     <span className="ml-auto text-[11px] text-(--text-muted)">
-                      key: {result.matchedKey}
+                      {result.matches.length} matches
                     </span>
                   )}
                 </div>
                 <pre className="mt-2 overflow-x-auto rounded-lg bg-(--bg-field) px-3 py-2 font-(family-name:--font-mono) text-xs text-(--text-secondary)">
-                  <HighlightedContext text={result.matchedContext} query={searchedQuery} />
+                  {result.matches.map((match, index) => (
+                    <div key={match.key ?? index}>
+                      <HighlightedContext text={match.context} query={searchedQuery} />
+                    </div>
+                  ))}
                 </pre>
               </div>
             ))}

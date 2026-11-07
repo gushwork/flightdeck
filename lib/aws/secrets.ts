@@ -11,6 +11,7 @@ import {
   type FilterNameStringType,
 } from '@aws-sdk/client-secrets-manager';
 import { awsClientOptions } from '@/lib/aws/client';
+import { parallelPool } from '@/lib/github/parallel-pool';
 import { coerceSecretStringForStorage } from '@/lib/secret-string';
 import type { SecretEntry, SecretValue } from '@/lib/types';
 
@@ -134,45 +135,28 @@ export async function batchGetValues(
     };
   };
 
-  const results = await Promise.all(
-    batches.map(async (batch) => {
+  // Bounded: firing every batch at once trips Secrets Manager throttling on large accounts,
+  // and throttled batches used to vanish from search results.
+  const results = await parallelPool(batches, 4, async (batch) => {
+    const values: SecretValue[] = [];
+    try {
+      const res = await client.send(new BatchGetSecretValueCommand({ SecretIdList: batch }));
+      for (const sv of res.SecretValues ?? []) values.push(fromBatchEntry(sv));
+    } catch {
+      /* whole batch failed — every id falls through to the one-by-one pass below */
+    }
+
+    // Retry any id the batch did not return — listed in Errors, truncated, or whole call failed.
+    const missing = batch.filter((id) => !values.some((v) => v.arn === id || v.name === id));
+    for (const id of missing) {
       try {
-        const cmd = new BatchGetSecretValueCommand({
-          SecretIdList: batch,
-        });
-        const res = await client.send(cmd);
-        const values: SecretValue[] = [];
-
-        for (const sv of res.SecretValues ?? []) {
-          values.push(fromBatchEntry(sv));
-        }
-
-        for (const err of res.Errors ?? []) {
-          const sid = err.SecretId;
-          if (!sid) continue;
-          if (values.some((v) => v.arn === sid || v.name === sid)) continue;
-          try {
-            values.push(await getSecretValue(region, sid, profile));
-          } catch {
-            /* e.g. access denied; batch already reported the failure */
-          }
-        }
-
-        return values;
+        values.push(await getSecretValue(region, id, profile));
       } catch {
-        // Whole batch failed: try one-by-one so one bad id does not drop the rest of the batch.
-        const out: SecretValue[] = [];
-        for (const id of batch) {
-          try {
-            out.push(await getSecretValue(region, id, profile));
-          } catch {
-            /* skip */
-          }
-        }
-        return out;
+        /* e.g. access denied / KMS decrypt denied — caller reports it as unreadable */
       }
-    }),
-  );
+    }
+    return values;
+  });
 
   return results.flat();
 }
