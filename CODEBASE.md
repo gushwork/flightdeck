@@ -32,6 +32,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── utils.ts
 │   ├── secret-value-format.ts
 │   ├── secret-value-search.ts # findSecretValueMatches — all key/leaf hits (nested paths) for /api/secrets/values
+│   ├── secret-replace.ts     # replaceInSecretString — case-sensitive find/replace in JSON values (keys untouched) or plain strings
 │   ├── secret-string.ts      # coerceSecretStringForStorage — API create/PUT + lib/aws create/put always store SecretString as UTF-8 text
 │   ├── amplify-env-map.ts    # JSON / .env parsing for Amplify env maps (reuses secret-value-format)
 │   ├── db.ts                 # Optional Postgres pool (DATABASE_URL) for server cache
@@ -218,7 +219,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 |--------|------|-------------|
 | GET | `/api/secrets/list?region=&profile=` | List secrets metadata |
 | POST | `/api/secrets/values` | Body: `query`, `region`, optional `profile` |
-| GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret |
+| POST | `/api/secrets/replace` | Bulk find/replace. Body: `names`, `find`, `replace`, `region`, optional `profile`, `dryRun` (default true). Re-reads each secret from AWS right before writing, skips no-match, confirms new version is AWSCURRENT; per-secret `status` |
+| GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret (GET is `Cache-Control: no-store`) |
 | GET | `/api/secrets/[id]/versions?region=&profile=` | Versions |
 | GET | `/api/secrets/[id]/history?region=&profile=` | CloudTrail GetSecretValue events |
 | POST | `/api/secrets/create` | Body: `name`, `secretString`, optional `description`, `tags`, `region`, `profile` — creates secret in Secrets Manager |
