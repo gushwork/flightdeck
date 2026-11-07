@@ -255,7 +255,11 @@ export function ValueSearchPanel({ initialQuery = "" }: { initialQuery?: string 
       <BulkEditModal
         selectedSecrets={Array.from(selected)}
         open={bulkEditOpen}
-        onClose={() => setBulkEditOpen(false)}
+        onClose={(applied) => {
+          setBulkEditOpen(false);
+          // Re-run the search so the list reflects the values that were just written.
+          if (applied) void doSearch();
+        }}
       />
     </section>
   );

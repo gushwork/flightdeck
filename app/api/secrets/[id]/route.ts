@@ -22,9 +22,9 @@ export async function GET(
     );
     const profile = profileFromRequest(request);
     const value = await getSecretValue(region, secretId, profile);
-    return Response.json({ value }, {
-      headers: { 'Cache-Control': 'private, max-age=10, stale-while-revalidate=30' },
-    });
+    // no-store: a browser-cached copy made edits read stale values (and wrote them back),
+    // and secret plaintext should not sit in the HTTP cache.
+    return Response.json({ value }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return Response.json({ error: message }, { status: 500 });
