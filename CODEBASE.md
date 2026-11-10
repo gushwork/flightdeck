@@ -220,7 +220,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/secrets/list?region=&profile=` | List secrets metadata |
 | POST | `/api/secrets/values` | Body: `query`, `region`, optional `profile` |
 | POST | `/api/secrets/replace` | Bulk find/replace. Body: `names`, `find`, `replace`, `region`, optional `profile`, `dryRun` (default true). Re-reads each secret from AWS right before writing, skips no-match, confirms new version is AWSCURRENT; per-secret `status` |
-| GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret (GET is `Cache-Control: no-store`) |
+| GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret (GET is `Cache-Control: no-store`). PUT takes optional `expectedVersionId`; if AWSCURRENT moved on since that version it returns **409** and writes nothing (`lib/secrets/stale-write.ts`). The value editor always sends the version it loaded, so a long-open tab can't revert newer changes. |
 | GET | `/api/secrets/[id]/versions?region=&profile=` | Versions |
 | GET | `/api/secrets/[id]/history?region=&profile=` | CloudTrail GetSecretValue events |
 | POST | `/api/secrets/create` | Body: `name`, `secretString`, optional `description`, `tags`, `region`, `profile` — creates secret in Secrets Manager |
