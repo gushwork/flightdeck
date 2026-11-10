@@ -214,7 +214,8 @@ export default function SecretDetailPage() {
     const res = await fetch(`/api/secrets/${encodedId}?${q}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secretString: next }),
+      // The version this edit is based on; the API refuses the save if the secret changed since.
+      body: JSON.stringify({ secretString: next, expectedVersionId: value?.versionId ?? "" }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
