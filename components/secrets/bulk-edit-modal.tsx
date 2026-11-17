@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
+import { MAX_REPLACE_NAMES, replaceNamesLimitError } from "@/lib/secret-replace";
 import type { SecretReplaceResult, SecretReplaceStatus } from "@/lib/types";
 
 interface BulkEditModalProps {
@@ -40,6 +41,12 @@ export function BulkEditModal({ selectedSecrets, open, onClose }: BulkEditModalP
   }
 
   async function doPreview() {
+    const tooMany = replaceNamesLimitError(selectedSecrets.length);
+    if (tooMany) {
+      setError(tooMany);
+      setResults(null);
+      return;
+    }
     setBusy("preview");
     setError(null);
     setApplied(false);
@@ -113,6 +120,9 @@ export function BulkEditModal({ selectedSecrets, open, onClose }: BulkEditModalP
           {selectedSecrets.length} secret{selectedSecrets.length !== 1 ? "s" : ""} selected · case-sensitive, values only
           (keys are not renamed) · each secret is re-read from AWS right before it is written
         </p>
+        {selectedSecrets.length > MAX_REPLACE_NAMES && (
+          <p className="mb-3 text-xs text-(--danger)">{replaceNamesLimitError(selectedSecrets.length)}</p>
+        )}
 
         <div className="space-y-3">
           <div>
@@ -136,7 +146,7 @@ export function BulkEditModal({ selectedSecrets, open, onClose }: BulkEditModalP
 
           <button
             onClick={() => void doPreview()}
-            disabled={!find || find === replace || busy !== null || selectedSecrets.length === 0}
+            disabled={!find || find === replace || busy !== null || selectedSecrets.length === 0 || selectedSecrets.length > MAX_REPLACE_NAMES}
             className="rounded-md border border-(--accent) px-4 py-1.5 text-sm font-medium text-(--accent) transition-colors hover:bg-(--accent-dim) disabled:opacity-50"
           >
             {busy === "preview" ? "Loading preview..." : "Preview"}

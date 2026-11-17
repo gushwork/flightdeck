@@ -7,14 +7,14 @@
   "description": "Local-first AWS and GitHub Actions control panel",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "next dev -p 3325",
+    "dev": "next dev -H 127.0.0.1 -p 3325",
     "build": "next build && node scripts/copy-standalone-assets.mjs",
-    "start": "next start -p 3325",
-    "start:standalone": "cross-env PORT=3325 node .next/standalone/server.js",
+    "start": "next start -H 127.0.0.1 -p 3325",
+    "start:standalone": "cross-env PORT=3325 HOSTNAME=127.0.0.1 node .next/standalone/server.js",
     "lint": "eslint",
     "test": "vitest run",
     "test:perf": "vitest run --config vitest.perf.config.ts",
-    "electron:dev": "concurrently -k \"next dev -p 3325\" \"wait-on http://127.0.0.1:3325 && cross-env FLIGHTDECK_ELECTRON_DEV=1 electron .\"",
+    "electron:dev": "concurrently -k \"next dev -H 127.0.0.1 -p 3325\" \"wait-on http://127.0.0.1:3325 && cross-env FLIGHTDECK_ELECTRON_DEV=1 electron .\"",
     "electron:pack": "npm run build && electron-builder --dir",
     "electron:dist": "npm run build && electron-builder"
   },
@@ -39,7 +39,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "libsodium-wrappers": "^0.8.4",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "pg": "^8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -57,8 +57,8 @@
     "cross-env": "^10.1.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
-    "eslint": "^10",
-    "eslint-config-next": "16.4.3",
+    "eslint": "^10.15.0",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "~6.0.3",
     "vitest": "^5.0.5",
@@ -103,6 +103,11 @@
     },
     "publish": {
       "provider": "github"
+    }
+  },
+  "overrides": {
+    "minimatch@3": {
+      "brace-expansion": "^1.1.22"
     }
   }
 }

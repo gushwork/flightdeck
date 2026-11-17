@@ -4,6 +4,7 @@
  */
 
 export type ModuleId =
+  | "costs"
   | "platforms"
   | "secrets"
   | "amplify"
@@ -36,6 +37,7 @@ export type NavIconId =
   | "flySecrets"
   | "globe"
   | "network"
+  | "costs"
   | "settings";
 
 /** Sub-links under a collapsible nav row (e.g. IAM utilities under Overview). */
@@ -80,6 +82,7 @@ export type SidebarServiceGroup =
  * AWS is wrapped in a collapsible row (`headerModuleId` hub link + nested `moduleIds`).
  */
 export const SIDEBAR_SERVICE_GROUPS: SidebarServiceGroup[] = [
+  { moduleIds: ["costs"] },
   {
     collapsible: true,
     headerModuleId: "platforms",
@@ -90,6 +93,12 @@ export const SIDEBAR_SERVICE_GROUPS: SidebarServiceGroup[] = [
 ];
 
 export const MODULE_NAV: ModuleNavSection[] = [
+  {
+    id: "costs",
+    enabled: true,
+    sectionLabel: "",
+    items: [{ href: "/costs", label: "Cloud spend", icon: "costs" }],
+  },
   {
     id: "platforms",
     enabled: true,

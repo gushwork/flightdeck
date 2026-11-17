@@ -182,6 +182,12 @@ const icons: Record<NavIconId, React.ReactNode> = {
       <path d="M8 5v3M3.5 11V8h9v3" />
     </svg>
   ),
+  costs: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M10 5.75H7.25a1.25 1.25 0 000 2.5h1.5a1.25 1.25 0 010 2.5H6M8 4.5v1.25M8 10.75V12" />
+    </svg>
+  ),
 };
 
 function NavItem({

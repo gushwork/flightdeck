@@ -96,7 +96,12 @@ describe("buildSnapshot", () => {
     expect(snap.state).toBe("idle");
     expect(snap.runnerVersion).toBe("2.338.0");
     expect(snap.jobs.map((j) => j.id)).toEqual(["plan-b", "plan-a"]);
-    expect(snap.jobs[0]).toMatchObject({ repo: "gushwork/flightdeck", result: "success", durationSec: 252 });
+    expect(snap.jobs[0]).toMatchObject({
+      repo: "gushwork/flightdeck",
+      result: "success",
+      durationSec: 252,
+      runner: "github-runner-001",
+    });
     expect(snap.stats).toMatchObject({ total: 2, success: 1, failure: 1, last24h: 2, avgDurationSec: 187 });
   });
 

@@ -24,6 +24,7 @@ export function RunnerVmSettings() {
   const [view, setView] = useState<RunnerConfigView | null>(null);
   const [host, setHost] = useState("");
   const [user, setUser] = useState("");
+  const [scope, setScope] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -31,6 +32,7 @@ export function RunnerVmSettings() {
     setView(next);
     setHost(next.saved.host);
     setUser(next.saved.user);
+    setScope(next.saved.scope);
   }, []);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function RunnerVmSettings() {
       const saveRes = await fetch("/api/github/runner/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, user }),
+        body: JSON.stringify({ host, user, scope }),
       });
       const saved = (await saveRes.json().catch(() => ({}))) as { config?: RunnerConfigView; error?: string };
       if (!saveRes.ok || !saved.config) {
@@ -78,7 +80,7 @@ export function RunnerVmSettings() {
     } finally {
       setBusy(false);
     }
-  }, [host, user, apply]);
+  }, [host, user, scope, apply]);
 
   const noticeColor =
     notice?.tone === "success" ? "text-(--success)" : notice?.tone === "danger" ? "text-(--danger)" : "text-(--text-muted)";
@@ -111,7 +113,7 @@ export function RunnerVmSettings() {
         </div>
         <div className="space-y-1.5">
           <label htmlFor="runner-vm-user" className="block text-xs font-medium text-(--text-secondary)">
-            SSH user
+            Runner user
           </label>
           <input
             id="runner-vm-user"
@@ -126,16 +128,31 @@ export function RunnerVmSettings() {
         </div>
       </div>
 
+      <div className="space-y-1.5">
+        <label htmlFor="runner-vm-scope" className="block text-xs font-medium text-(--text-secondary)">
+          GitHub scope for new runners
+        </label>
+        <input
+          id="runner-vm-scope"
+          type="text"
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          placeholder={view?.effective.scope ?? "enterprises/<slug>, orgs/<org> or repos/<owner>/<repo>"}
+          spellCheck={false}
+          autoComplete="off"
+          className={inputClass}
+        />
+        <p className="text-[11px] text-(--text-muted)">
+          Where VMs created on the Runner page register. Empty: <Code>RUNNER_GITHUB_SCOPE</Code>, else the scope the
+          current runner reports.
+        </p>
+      </div>
+
       <div className="space-y-1 text-[11px] text-(--text-muted)">
         {view && <p>{sourceHint(view)} Leave a field empty to fall back to the environment.</p>}
         <p>
-          {view?.hasPassword ? (
-            <>SSH password found in the environment.</>
-          ) : (
-            <>
-              No SSH password found — add <Code>VM_PASSWORD</Code> to <Code>.env.azure</Code>. It is never saved from this page.
-            </>
-          )}
+          Connects with <Code>az ssh</Code> as your <Code>az login</Code> identity (needs the Virtual Machine Administrator
+          Login role on the VM), then reads the runner as the runner user via <Code>sudo</Code>. No password needed.
         </p>
       </div>
 

@@ -18,6 +18,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3325
 ENV HOSTNAME=0.0.0.0
+# This image publishes port 3325. Bulk secret replace allows callers that are not on the loopback interface.
+ENV FLIGHTDECK_ALLOW_REMOTE=1
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs

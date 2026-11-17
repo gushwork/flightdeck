@@ -11,14 +11,13 @@ describe("mergeConfig", () => {
     expect(mergeConfig({}, none)).toMatchObject({ host: null, hostSource: null, user: "azureuser", userSource: "default" });
   });
 
-  it("reads host/user/password from env", () => {
-    const env: Record<string, string> = { RUNNER_VM_HOST: "10.0.0.1", RUNNER_VM_USER: "ops", VM_PASSWORD: "pw" };
+  it("reads host/user from env", () => {
+    const env: Record<string, string> = { RUNNER_VM_HOST: "10.0.0.1", RUNNER_VM_USER: "ops" };
     expect(mergeConfig({}, (k) => env[k])).toMatchObject({
       host: "10.0.0.1",
       hostSource: "env",
       user: "ops",
       userSource: "env",
-      password: "pw",
     });
   });
 
@@ -58,7 +57,6 @@ describe("connectionTarget", () => {
     expect(connectionTarget(mergeConfig({ host: "10.0.0.2" }, none))).toEqual({
       host: "10.0.0.2",
       user: "azureuser",
-      password: undefined,
     });
   });
 });

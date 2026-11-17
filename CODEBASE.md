@@ -26,13 +26,17 @@ Target: single operator managing secrets, Amplify env configuration, access find
 ├── AGENTS.md              # Agent instructions (graphify-first code search)
 ├── CLAUDE.md              # Claude-specific project instructions
 ├── CODEBASE.md
+├── instrumentation.ts     # Node server start: record the TCP peer for the bulk-replace loopback check
+├── proxy.ts               # Next 16 proxy on /api/**: 403 for state-changing requests a browser sent cross-site (CSRF; app has no login) — lib/same-origin.ts isCrossSiteWrite
 ├── graphify-out/graph.json # Structural AST index (graphify build)
 ├── lib/
 │   ├── types.ts            # SecretEntry, SecretSearchResult, SecretValue, Amplify* DTOs
 │   ├── utils.ts
 │   ├── secret-value-format.ts
 │   ├── secret-value-search.ts # findSecretValueMatches — all key/leaf hits (nested paths) for /api/secrets/values
-│   ├── secret-replace.ts     # replaceInSecretString — case-sensitive find/replace in JSON values (keys untouched) or plain strings
+│   ├── secret-replace.ts     # replaceInSecretString — case-sensitive find/replace in JSON values (keys untouched) or plain strings; MAX_REPLACE_NAMES = 100
+│   ├── local-operator.ts     # Loopback peer check for POST /api/secrets/replace; FLIGHTDECK_ALLOW_REMOTE=1 opts out (set in the Docker image)
+│   ├── same-origin.ts        # isCrossSiteWrite (Sec-Fetch-Site / Origin vs Host; used by proxy.ts) + isSameOriginJson (also requires application/json; runner routes + secrets replace)
 │   ├── secret-string.ts      # coerceSecretStringForStorage — API create/PUT + lib/aws create/put always store SecretString as UTF-8 text
 │   ├── amplify-env-map.ts    # JSON / .env parsing for Amplify env maps (reuses secret-value-format)
 │   ├── db.ts                 # Optional Postgres pool (DATABASE_URL) for server cache
@@ -80,11 +84,20 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── secrets-dependabot.ts / secrets-codespaces.ts # Wave 3 platform fetchers
 │   └── secrets-platform-registry.ts # PLATFORM_FETCHERS plugin list for indexer
 ├── lib/runner/
-│   ├── types.ts            # Client-safe RunnerSnapshot / RunnerJob / RunnerConfigView DTOs
-│   ├── config.ts           # Server-only: host/user from Settings file (`~/.flightdeck/runner-vm.json`) > env / `.env.azure`; validation; `configView()` (tested in config.test.ts)
+│   ├── types.ts            # Client-safe RunnerSnapshot / RunnerJob / RunnerConfigView / RunnerSshAccess / RunnerFleet / RunnerOperation DTOs
+│   ├── config.ts           # Server-only: host/user/GitHub scope from Settings file (`~/.flightdeck/runner-vm.json`) > env (`RUNNER_VM_*`, `RUNNER_GITHUB_SCOPE`) / `.env.azure`; validation; `configView()` (tested in config.test.ts)
+│   ├── fleet-plan.ts       # Pure: VM/size/label/scope validation, nextRunnerName, hosted-label warning, runner release + SHA parsing, first-boot bootstrap script (Docker + runner + svc), orphan registrations (tested in fleet-plan.test.ts)
+│   ├── fleet.ts            # Server-only: runner VMs in the template VM's resource group joined to GitHub runners; create (copy template VM, attach the template NIC's NSG so one SSH allowlist covers every runner — `--nsg ""` when the template has none and the subnet NSG governs; failure cleanup never deletes that shared NSG; cloud-init registration, Entra login + VM Admin Login role, wait for online) and kill (deregister, delete VM/NIC/IP/disks/unused NSG) as background operations on globalThis
 │   ├── parse.ts            # Pure: pairs Runner-log events with Worker-log metadata by planId → jobs, state, stats (tested in parse.test.ts)
 │   ├── remote-script.ts    # Read-only python3 snapshot script piped to the VM over `ssh … python3 -`
-│   └── ssh.ts              # Server-only: ssh + SSH_ASKPASS password auth, 4s shared cache (`clearRunnerCache`)
+│   ├── exec.ts             # Server-only: `run()` — execFile without a shell, last stderr line as the error
+│   ├── ssh.ts              # Server-only: `az ssh config` mints Entra ID cert (reused ~45 min), plain `ssh -F` + `sudo -u <runner user>`, 4s shared cache (`clearRunnerCache`)
+│   ├── ssh-access.ts       # Pure: NSG evaluation for TCP 22 (priority order, subnet + NIC NSGs, wildcard vs allowlist), managed-rule changes; closed = Deny `Internet` (tested in ssh-access.test.ts)
+│   └── nsg.ts              # Server-only: shared `az()` helper + `azHint`; host → public IP → NIC → subnet/NSG discovery via `az` (cached per host), your public IPv4 (checkip.amazonaws.com / api.ipify.org), allow-my-IP / remove / close on the port-22 rule
+├── lib/costs/
+│   ├── types.ts            # Client-safe CostsSnapshot / ProviderCost (ok | unconfigured | error; spend before credits + separate `credits`) / CostPeriod DTOs, PROVIDER_LABEL
+│   ├── rollup.ts           # Pure: costPeriod (UTC last month + MTD), projectMonthEnd, rollup (credits kept apart), aws/azure/gcp row parsers, dedupeAccounts, guarded BigQuery SQL (tested in rollup.test.ts)
+│   └── cli.ts              # Server-only: `aws ce get-cost-and-usage` per local AWS profile, `az rest` Cost Management query per enabled subscription, `bq query` on GCP billing export; 1h in-process cache (60s when a provider errored)
 ├── lib/vpc/                # Client-safe, pure (unit-tested: *.test.ts)
 │   ├── types.ts            # VpcDetail + subnet/RT/SG/NACL/ENI/peering/load balancer/service DTOs, VpcCoverage, VpcFinding, VpcViewId
 │   ├── cidr.ts             # IPv4 CIDR math: parse/normalise, overlap, freeBlocks, freeBlocksOfSize
@@ -153,11 +166,12 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── vpc/layout.tsx             # Mounts VpcProvider so list ↔ detail navigation is instant
 │   ├── vpc/page.tsx               # VPC list
 │   ├── vpc/[vpcId]/page.tsx       # VPC detail (multi-view via ?view=)
+│   ├── costs/page.tsx             # Cloud spend: MTD / projected / last-month totals, per-cloud cards with share meter, top services across clouds
 │   ├── github/
 │   │   ├── page.tsx            # Actions summary dashboard: stat ribbon (in-progress/queued/24h-success/24h-failed), active runs, recent failures, health bars; j/k/1/2 keyboard nav
 │   │   ├── runs/page.tsx       # All-runs card grid: filterable (status/repo/workflow/branch), URL-synced, 2D arrow-key nav, dispatch trigger
 │   │   ├── workflows/page.tsx  # Workflow grid: badge, single Run popover (useSingletonPopoverDismiss), WorkflowDispatchForm; last run cross-ref; drawer on card
-│   │   ├── runner/page.tsx     # Azure VM self-hosted runner: live state (busy/idle/offline), VM stats, job history from runner _diag logs; smart polling (8s busy / 15s idle, paused when hidden)
+│   │   ├── runner/page.tsx     # Azure VM self-hosted runner. Header shows live state on every tab; tabs in `?tab=` (status default, jobs, vms, ssh), all panels stay mounted (hidden) so drafts and polling survive switches. Status = live card, VM stats, 5 recent jobs; Jobs = full history from runner _diag logs with result filter, each row shows the runner/VM it ran on (`RunnerJob.runner`, from the snapshot's runner name; only the Settings VM's logs are read); VMs = components/github/runner-fleet.tsx (create / kill whole Azure VMs, typed-name kill confirm, orphan registrations, operation log; `onSummary` feeds the tab badge); SSH access = components/github/runner-ssh-access.tsx (NSG allowlist, which VMs it applies to, one copyable `az ssh vm` command per covered VM, no in-app shell; `onAccess` feeds the badge and pauses polling). Smart polling (8s busy / 15s idle, paused when hidden or when the NSG blocks your IP)
 │   │   └── secrets/page.tsx    # Secrets hub: inventory dashboard, filters, repo drawer, drift audit, bulk edit
 │   ├── fly/
 │   │   ├── overview/page.tsx   # Fly app health grid: machines, regions, checks, deploy time; links to secrets and Fly dashboard
@@ -219,7 +233,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 |--------|------|-------------|
 | GET | `/api/secrets/list?region=&profile=` | List secrets metadata |
 | POST | `/api/secrets/values` | Body: `query`, `region`, optional `profile` |
-| POST | `/api/secrets/replace` | Bulk find/replace. Body: `names`, `find`, `replace`, `region`, optional `profile`, `dryRun` (default true). Re-reads each secret from AWS right before writing, skips no-match, confirms new version is AWSCURRENT; per-secret `status` |
+| POST | `/api/secrets/replace` | Bulk find/replace. Body: `names` (max 100), `find`, `replace`, `region`, optional `profile`, `dryRun` (default true). Refuses a TCP peer that is not loopback unless `FLIGHTDECK_ALLOW_REMOTE=1`. Re-reads each secret from AWS right before writing, skips no-match, confirms new version is AWSCURRENT; per-secret `status` |
 | GET/PUT | `/api/secrets/[id]?region=&profile=` | Get/put secret (GET is `Cache-Control: no-store`) |
 | GET | `/api/secrets/[id]/versions?region=&profile=` | Versions |
 | GET | `/api/secrets/[id]/history?region=&profile=` | CloudTrail GetSecretValue events |
@@ -237,6 +251,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/iam/users?region=&profile=` | List IAM usernames in current account/profile |
 | POST | `/api/iam/create-user` | Body: `region`, optional `profile`, `newUserName`, `templateUserName`, optional `includeGroups` — creates user, copies permissions from template, adds console password (PasswordResetRequired=true), access key; returns sign-in URL + credentials |
 | GET | `/api/iam/whoami?region=&profile=` | Returns `accountId` for labels |
+| GET | `/api/costs?refresh=1` | `{ snapshot: CostsSnapshot }` — last-month + month-to-date spend for AWS, Azure, GCP via local CLIs; never errors (per-provider `status`); `refresh=1` bypasses the 1h cache (2 AWS Cost Explorer calls per profile, $0.01 each) |
 | GET | `/api/vpc?region=&profile=` | `{ vpcs: VpcDetail[], warnings, pending }` — read-only detail for every VPC in the region incl. load balancers, RDS/Lambda/ElastiCache/ECS, `findings`/`score` |
 | GET | `/api/github/repos` | List all repos the authenticated gh CLI user can access |
 | GET | `/api/github/actions/runs?status=&repo=` | List workflow runs across repos (batched, 30/repo); computed summary |
@@ -248,7 +263,9 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/github/actions/workflows/detail?repo=&workflowId=` | Full workflow detail: metadata + 15 recent runs + YAML file content (parallel) |
 | GET | `/api/github/actions/workflows/dispatch-schema?repo=&workflowId=` | Parses workflow YAML for `workflow_dispatch.inputs`; returns `suggestedRef` (default branch) |
 | GET | `/api/github/runner` | Azure VM runner snapshot read over SSH: `{ snapshot }` (state, supervisor, VM stats, current job, job history) or `{ error }` with 502 |
-| GET/PUT | `/api/github/runner/config` | Runner VM host/user: GET returns `{ config }` (saved overrides, effective values + source, `hasPassword`; never the password); PUT `{ host?, user? }` saves to `~/.flightdeck/runner-vm.json` (empty = remove override). PUT requires same-origin `application/json` (else 403) because the host receives the SSH password |
+| GET/PUT | `/api/github/runner/config` | Runner VM host/user: GET returns `{ config }` (saved overrides, effective values + source); PUT `{ host?, user?, scope? }` saves to `~/.flightdeck/runner-vm.json` (empty = remove override). PUT requires same-origin `application/json` (else 403) because the host decides where Flightdeck SSHes with your Entra identity |
+| GET/POST | `/api/github/runner/access` | SSH (port 22) allowlist on the runner VM's NSG: GET returns `{ access }` (openToInternet, your public IP + whether it can connect, managed rule, allowed sources, `connect` = configured VM + every VM whose NIC shares the NSG with its `az ssh vm` command, `subnets` the NSG is attached to); POST `{ action: "allow-my-ip" }` (server looks up the IP itself), `{ action: "remove", source }` or `{ action: "close" }` (Deny `Internet`). POST requires same-origin JSON (`lib/same-origin.ts`) |
+| GET/POST | `/api/github/runner/fleet` | Runner VMs: GET `{ fleet }` (VMs in the template VM's resource group + GitHub runner status, orphan registrations, create defaults, operations); `?only=operations` returns just `{ operations }`. POST `{ action: "create", input: { name, size, labels } }` or `{ action: "kill", vm, confirm }` (confirm = vm) start a background operation and return `{ operation }`; `{ action: "remove-registration", runnerId }` deletes a GitHub registration with no VM. Same-origin JSON only |
 | GET | `/api/github/secrets/index` | Cached secrets/variables inventory across repos (Postgres TTL or in-memory) |
 | POST | `/api/github/secrets/index` | Force refresh inventory scan |
 | GET | `/api/github/secrets/search` | Filter inventory (`q`, `owner`, `scope`, `platform`, `kind`, `repo`, `environment`) |
@@ -268,6 +285,15 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/fly/apps/[app]/status` | App status: machines, regions, checks, health badge |
 | GET | `/api/fly/apps/[app]/secrets` | List secret names + digests (values never returned) |
 | POST | `/api/fly/apps/[app]/secrets` | Body: `{ set?: Record<string,string>, unset?: string[] }` — set/remove secrets via flyctl |
+
+## Cloud spend
+
+- `/costs` (sidebar "Cloud spend", first group under Dashboard). Read-only; shells out to CLIs, no SDKs.
+- **Spend = charges before credits, refunds and tax.** Credits are returned separately (`credits`) and shown on the card, never netted in. Tax is excluded because AWS posts it only at invoice time, which made a closed month look larger than the current one.
+- **AWS**: every profile from `aws configure list-profiles` (default chain if none), in parallel. Per profile two `aws ce get-cost-and-usage` calls (UnblendedCost, MONTHLY, `NextPageToken` paged): spend grouped by LINKED_ACCOUNT + SERVICE with RECORD_TYPE Credit/Refund/Tax filtered out, and credits (Credit/Refund) grouped by LINKED_ACCOUNT. `dedupeAccounts` counts each account once (a management-account profile sees every member). Failing profiles (expired SSO, no Cost Explorer access) surface as a card `warning`. Not tied to the workspace profile selector.
+- **Azure**: `az rest` POST to `Microsoft.CostManagement/query` (ActualCost, Monthly, grouped by ServiceName) for every enabled subscription in `az account list`. Sends `ClientType: flightdeck` because the default az client-type quota is shared and usually returns 429. Partial failures surface as a card `warning`.
+- **GCP**: no CLI reports spend, so it reads the Cloud Billing BigQuery export with `bq query` (`cost` and `credits` by `invoice.month`, `cost_type != 'tax'`; credits include sustained/committed-use discounts). Needs `GCP_BILLING_EXPORT=project.dataset` (queries `gcp_billing_export_v1_*`, so every billing account exported there is summed; `project.dataset.table` pins one) and the Google Cloud SDK on the server's PATH; otherwise, or until Google writes the first export table, the card shows `Not set up`.
+- Totals sum per currency and only over loaded providers; a banner says which clouds are missing. Projection is straight-line (MTD / days elapsed × days in month, UTC).
 
 ## Access Analyzer & CloudTrail
 
@@ -330,11 +356,13 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - `/github/runner` (nav: GitHub → Runner) shows the self-hosted runner `github-runner-001` (enterprise `gushwork-ai`) on the Azure VM. Runner listener runs under **pm2** (`run-sh`), not systemd — the `actions.runner.*` unit is installed but inactive.
 - One SSH call per refresh runs [`remote-script.ts`](lib/runner/remote-script.ts) (python3, read-only): `ps` for `Runner.Listener` / `Runner.Worker` (worker present = busy), `pm2 jlist`, `/proc`, `~/actions-runner/_diag/Runner_*.log` event lines (`Running job` / `completed with result`) and each `Worker_*.log` job message (`github` context → repo, workflow, run id, event, ref, actor). [`parse.ts`](lib/runner/parse.ts) joins them by plan id.
 - History only covers what the runner still keeps in `_diag` (it prunes old logs) — the page shows the oldest retained job.
-- Config precedence: **Settings → Runner VM** (host/user saved server-side in `~/.flightdeck/runner-vm.json`, override dir with `FLIGHTDECK_CONFIG_DIR`) > `RUNNER_VM_HOST` / `RUNNER_VM_USER` in env or gitignored `.env.azure` (read from the process cwd — Next does not auto-load it) > user default `azureuser`. Host has no default. The password (`VM_PASSWORD` / `RUNNER_VM_PASSWORD`) is env-only and never saved or returned by the API. Host/user are regex-validated before reaching ssh argv. Settings has a "Save & test connection" button (`components/settings/runner-vm-settings.tsx`). Password reaches `ssh` only via `SSH_ASKPASS` env — never argv or disk. Requires an `ssh` binary on the host (not in the Docker image; POSIX only, askpass helper is a `sh` script).
+- Config precedence: **Settings → Runner VM** (host/user saved server-side in `~/.flightdeck/runner-vm.json`, override dir with `FLIGHTDECK_CONFIG_DIR`) > `RUNNER_VM_HOST` / `RUNNER_VM_USER` in env or gitignored `.env.azure` (read from the process cwd — Next does not auto-load it) > user default `azureuser`. Host has no default. Host/user are regex-validated before reaching az/ssh argv and the remote `sudo` command. Settings has a "Save & test connection" button (`components/settings/runner-vm-settings.tsx`).
+- Auth is Entra ID via Azure CLI — no password. `az ssh config --ip <host>` mints a ~1h cert + key into a private temp dir (deleted on exit); it is reused for 45 min (or until an ssh failure / host change), so polls only pay for plain `ssh -F`. Login user is the `az login` identity; the snapshot script runs as `sudo -n -u <runner user> -H python3 -` (runner files and pm2 live under that user). Needs on the host: `az` logged in + `az extension add --name ssh`, and an `ssh` binary (neither is in the Docker image). Needs on the VM: system-assigned identity, `AADSSHLoginForLinux` extension, and the **Virtual Machine Administrator Login** role for the user (plain *User Login* has no sudo).
 
 ## Gotchas
 
 - **CI runners / Node**: Ubuntu jobs in `.github/workflows/ci.yml` and `release.yml` (`docker`, `electron-linux`) use `runs-on: ubuntu-latest`. `electron-macos` and `electron-windows` stay on `macos-latest` and `windows-latest`. Actions and the Dockerfile use Node 26 (`node:26-bookworm-slim`).
+- **Dev server bind**: `npm run dev`, `npm run start`, and `npm run electron:dev` listen on `127.0.0.1` only. The Docker image still uses `HOSTNAME=0.0.0.0` and sets `FLIGHTDECK_ALLOW_REMOTE=1`.
 - **Profile dropdown hydration**: Saved profile names from `localStorage` are applied after mount so SSR and the first client render match; the list briefly shows env-only options until the transition runs.
 - **Postgres cache**: If `DATABASE_URL` is unset or the DB is unreachable, listing secrets still works; caching is best-effort. Ensure `DATABASE_URL` and network access if you rely on cache for hot paths.
 - **IAM copy**: Target profile must be a named profile (not default chain). Add profiles via Settings / `NEXT_PUBLIC_AWS_PROFILES` / `aws-saved-profiles` in localStorage.
