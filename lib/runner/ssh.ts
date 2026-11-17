@@ -1,75 +1,82 @@
-import { execFile } from "child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { connectionTarget, loadConfig } from "./config";
+import { run } from "./exec";
 import { buildSnapshot, type RawSnapshot } from "./parse";
 import { REMOTE_SNAPSHOT_SCRIPT } from "./remote-script";
 import type { RunnerSnapshot } from "./types";
 
 const CACHE_TTL_MS = 4_000;
 const SSH_TIMEOUT_MS = 25_000;
+const AZ_TIMEOUT_MS = 60_000;
+/** `az ssh` certificates live ~1h; re-mint well before expiry. */
+const CERT_MAX_AGE_MS = 45 * 60_000;
 
-let askpassPath: string | null = null;
+const ACCESS_HINT =
+  "Needs `az login` as a user with the 'Virtual Machine Administrator Login' role on the VM, and the AADSSHLoginForLinux extension on the VM.";
 
-/** ssh reads the password from this helper; it only echoes an env var, so the secret never hits disk or argv. */
-function ensureAskpass(): string {
-  if (askpassPath) return askpassPath;
-  const dir = mkdtempSync(path.join(tmpdir(), "flightdeck-askpass-"));
-  const file = path.join(dir, "askpass.sh");
-  writeFileSync(file, '#!/bin/sh\nprintf \'%s\\n\' "$FLIGHTDECK_SSH_PASSWORD"\n', { mode: 0o700 });
-  process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
-  askpassPath = file;
+let keyDir: string | null = null;
+let sshConfig: { host: string; file: string; mintedAt: number } | null = null;
+
+/**
+ * `az ssh config` mints a short-lived Entra ID certificate from the `az login` session and writes an
+ * ssh config (login user, cert, key) for the host. Reused until near expiry so polls skip the `az` call.
+ */
+async function ensureSshConfig(host: string): Promise<string> {
+  if (sshConfig?.host === host && Date.now() - sshConfig.mintedAt < CERT_MAX_AGE_MS) return sshConfig.file;
+  if (!keyDir) {
+    const dir = mkdtempSync(path.join(tmpdir(), "flightdeck-azssh-"));
+    process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+    keyDir = dir;
+  }
+  const file = path.join(keyDir, "config");
+  const args = ["ssh", "config", "--ip", host, "--file", file, "--keys-destination-folder", path.join(keyDir, "keys")];
+  try {
+    await run("az", [...args, "--overwrite", "--only-show-errors"], AZ_TIMEOUT_MS);
+  } catch (err) {
+    throw new Error(`az ssh config failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  sshConfig = { host, file, mintedAt: Date.now() };
   return file;
 }
 
-function runSsh(host: string, user: string, password: string | undefined): Promise<string> {
+async function runSsh(host: string, user: string): Promise<string> {
+  const config = await ensureSshConfig(host);
   const args = [
+    "-F", config,
     "-o", "StrictHostKeyChecking=accept-new",
     "-o", "ConnectTimeout=10",
     "-o", "ServerAliveInterval=5",
     "-o", "LogLevel=ERROR",
-    ...(password
-      ? ["-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "PubkeyAuthentication=no", "-o", "NumberOfPasswordPrompts=1"]
-      : ["-o", "BatchMode=yes"]),
-    `${user}@${host}`,
-    "python3 -",
+    "-o", "BatchMode=yes",
+    "-o", "IdentitiesOnly=yes",
+    host,
+    // Login is the Entra identity; the runner (and its pm2) live under `user`.
+    `sudo -n -u ${user} -H python3 -`,
   ];
-  const env = password
-    ? {
-        ...process.env,
-        SSH_ASKPASS: ensureAskpass(),
-        SSH_ASKPASS_REQUIRE: "force",
-        FLIGHTDECK_SSH_PASSWORD: password,
-      }
-    : process.env;
+  try {
+    return await run("ssh", args, SSH_TIMEOUT_MS, REMOTE_SNAPSHOT_SCRIPT);
+  } catch (err) {
+    sshConfig = null; // re-mint next time in case the cert was revoked or roles changed
+    const detail = err instanceof Error ? err.message : String(err);
+    const hint = /Permission denied|sudo:/.test(detail) ? ` ${ACCESS_HINT}` : "";
+    throw new Error(`SSH to ${host} failed: ${detail}.${hint}`);
+  }
+}
 
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      "ssh",
-      args,
-      { env, timeout: SSH_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) {
-          const detail = stderr.trim().split("\n").at(-1) || err.message;
-          reject(new Error(`SSH to ${user}@${host} failed: ${detail}`));
-        } else {
-          resolve(stdout);
-        }
-      },
-    );
-    child.stdin?.end(REMOTE_SNAPSHOT_SCRIPT);
-  });
+let lastRunnerUrl: string | null = null;
+
+/** Registration URL from the last successful snapshot (lets the fleet find its GitHub scope with no setting). */
+export function knownRunnerUrl(): string | null {
+  return lastRunnerUrl;
 }
 
 async function collect(): Promise<RunnerSnapshot> {
-  const { host, user, password } = connectionTarget(loadConfig());
-  try {
-    return buildSnapshot(JSON.parse(await runSsh(host, user, password)) as RawSnapshot);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(password ? msg : `${msg}. Set VM_PASSWORD in .env.azure (or RUNNER_VM_PASSWORD) for password auth.`);
-  }
+  const { host, user } = connectionTarget(loadConfig());
+  const snapshot = buildSnapshot(JSON.parse(await runSsh(host, user)) as RawSnapshot);
+  lastRunnerUrl = snapshot.runnerUrl ?? lastRunnerUrl;
+  return snapshot;
 }
 
 let cache: { at: number; value: RunnerSnapshot } | null = null;

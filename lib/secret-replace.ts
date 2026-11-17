@@ -12,6 +12,15 @@ export interface SecretReplaceOutcome {
   changes: SecretReplaceChange[];
 }
 
+/** One request must not fan out into an unbounded Secrets Manager read/write loop. */
+export const MAX_REPLACE_NAMES = 100;
+
+/** Null when `count` is allowed. The same sentence is the API error and the bulk-edit warning. */
+export function replaceNamesLimitError(count: number): string | null {
+  if (count <= MAX_REPLACE_NAMES) return null;
+  return `The names list has ${count} secrets. Choose ${MAX_REPLACE_NAMES} or fewer.`;
+}
+
 /** Excerpt around the first hit; the same window lines up in `before` and `after` because the prefix is unchanged. */
 function excerpt(text: string, idx: number, len: number): string {
   const start = Math.max(0, idx - 40);

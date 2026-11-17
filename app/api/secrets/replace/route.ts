@@ -2,7 +2,9 @@ import { getSecretValue, putSecretValue } from '@/lib/aws/secrets';
 import { getRegion, parseProfileParam } from '@/lib/aws/client';
 import { invalidateCache } from '@/lib/cache';
 import { parallelPool } from '@/lib/github/parallel-pool';
-import { replaceInSecretString } from '@/lib/secret-replace';
+import { localOperatorBlock } from '@/lib/local-operator';
+import { isSameOriginJson } from '@/lib/same-origin';
+import { replaceInSecretString, replaceNamesLimitError } from '@/lib/secret-replace';
 import type { SecretReplaceResult } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -54,15 +56,23 @@ async function replaceOne(
 }
 
 /**
- * Case-sensitive find/replace across secrets. Body: `names`, `find`, `replace`, `region`,
- * optional `profile`, `dryRun` (default true). Each secret is re-read from AWS at call time.
+ * Case-sensitive find/replace across secrets. Body: `names` (at most 100), `find`, `replace`,
+ * `region`, optional `profile`, `dryRun` (default true). Each secret is re-read from AWS at call time.
+ * Callers must connect from this machine unless `FLIGHTDECK_ALLOW_REMOTE=1`.
  */
 export async function POST(request: Request) {
   try {
+    if (!isSameOriginJson(request)) {
+      return Response.json({ error: 'Cross-origin or non-JSON request refused' }, { status: 403 });
+    }
+    const blocked = localOperatorBlock();
+    if (blocked) return Response.json({ error: blocked }, { status: 403 });
+
     const body = await request.json();
-    const names = Array.isArray(body.names)
-      ? [...new Set((body.names as unknown[]).filter((n): n is string => typeof n === 'string' && n.length > 0))]
-      : [];
+    const rawNames = Array.isArray(body.names) ? (body.names as unknown[]) : [];
+    const tooMany = replaceNamesLimitError(rawNames.length);
+    if (tooMany) return Response.json({ error: tooMany }, { status: 400 });
+    const names = [...new Set(rawNames.filter((n): n is string => typeof n === 'string' && n.length > 0))];
     const find = typeof body.find === 'string' ? body.find : '';
     const replace = typeof body.replace === 'string' ? body.replace : '';
     const dryRun = body.dryRun !== false;

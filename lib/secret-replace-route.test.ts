@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_REPLACE_NAMES } from '@/lib/secret-replace';
+import { runAsOperatorClient } from '@/lib/local-operator';
 
 // In-memory Secrets Manager: name -> versions (last = AWSCURRENT).
 const store = new Map<string, { versionId: string; secretString: string }[]>();
@@ -27,16 +29,26 @@ function seed(name: string, value: unknown) {
 }
 const current = (name: string) => JSON.parse(store.get(name)!.at(-1)!.secretString);
 
-async function call(body: Record<string, unknown>) {
-  const res = await POST(
-    new Request('http://x/api/secrets/replace', { method: 'POST', body: JSON.stringify({ region: 'us-east-1', ...body }) }),
-  );
-  return { status: res.status, data: await res.json() };
+const JSON_HEADERS = { 'content-type': 'application/json' };
+
+async function call(body: Record<string, unknown>, client = '127.0.0.1', headers: Record<string, string> = JSON_HEADERS) {
+  return runAsOperatorClient(client, async () => {
+    const res = await POST(
+      new Request('http://x/api/secrets/replace', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ region: 'us-east-1', ...body }),
+      }),
+    );
+    return { status: res.status, data: await res.json() };
+  });
 }
 
 beforeEach(() => {
   store.clear();
+  delete process.env.FLIGHTDECK_ALLOW_REMOTE;
   vi.mocked(aws.putSecretValue).mockClear();
+  vi.mocked(aws.getSecretValue).mockClear();
 });
 
 describe('POST /api/secrets/replace', () => {
@@ -90,5 +102,61 @@ describe('POST /api/secrets/replace', () => {
   it('rejects empty find and identical find/replace', async () => {
     expect((await call({ names: ['a'], find: '', replace: 'x' })).status).toBe(400);
     expect((await call({ names: ['a'], find: 'x', replace: 'x' })).status).toBe(400);
+  });
+
+  it('rejects a names list over the cap before it calls AWS', async () => {
+    const names = Array.from({ length: MAX_REPLACE_NAMES + 1 }, (_, i) => `s${i}`);
+    const { status, data } = await call({ names, find: 'old', replace: 'new', dryRun: false });
+    expect(status).toBe(400);
+    expect(data.error).toContain(String(MAX_REPLACE_NAMES));
+    expect(aws.getSecretValue).not.toHaveBeenCalled();
+  });
+
+  it('refuses a call when the server did not record a peer', async () => {
+    const res = await POST(
+      new Request('http://x/api/secrets/replace', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ region: 'us-east-1', names: ['a'], find: 'old', replace: 'new' }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(aws.getSecretValue).not.toHaveBeenCalled();
+  });
+
+  it('refuses a cross-site text/plain post (CSRF form or no-cors fetch)', async () => {
+    seed('app/db', { url: 'old' });
+    const { status } = await call({ names: ['app/db'], find: 'old', replace: 'new', dryRun: false }, '127.0.0.1', {
+      'content-type': 'text/plain',
+    });
+    expect(status).toBe(403);
+    expect(aws.getSecretValue).not.toHaveBeenCalled();
+  });
+
+  it('refuses a JSON post from another origin', async () => {
+    seed('app/db', { url: 'old' });
+    const { status } = await call({ names: ['app/db'], find: 'old', replace: 'new', dryRun: false }, '127.0.0.1', {
+      ...JSON_HEADERS,
+      origin: 'https://evil.example',
+      host: 'x',
+    });
+    expect(status).toBe(403);
+    expect(aws.getSecretValue).not.toHaveBeenCalled();
+  });
+
+  it('refuses a caller that is not on this machine', async () => {
+    seed('app/db', { url: 'old' });
+    const { status, data } = await call({ names: ['app/db'], find: 'old', replace: 'new', dryRun: false }, '10.1.2.3');
+    expect(status).toBe(403);
+    expect(data.error).toContain('this machine');
+    expect(aws.getSecretValue).not.toHaveBeenCalled();
+    expect(current('app/db')).toEqual({ url: 'old' });
+  });
+
+  it('allows a remote caller only when FLIGHTDECK_ALLOW_REMOTE=1', async () => {
+    process.env.FLIGHTDECK_ALLOW_REMOTE = '1';
+    seed('app/db', { url: 'old' });
+    const { data } = await call({ names: ['app/db'], find: 'old', replace: 'new', dryRun: false }, '10.1.2.3');
+    expect(data.results[0].status).toBe('updated');
   });
 });

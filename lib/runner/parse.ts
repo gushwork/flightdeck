@@ -159,6 +159,7 @@ export function buildJobs(raw: RawSnapshot): RunnerJob[] {
       startedAt,
       completedAt,
       durationSec: secondsBetween(startedAt, completedAt),
+      runner: raw.runnerName,
     });
   }
 
@@ -181,6 +182,7 @@ export function buildJobs(raw: RawSnapshot): RunnerJob[] {
       startedAt: ev.startedAt,
       completedAt: ev.completedAt,
       durationSec: secondsBetween(ev.startedAt, ev.completedAt),
+      runner: raw.runnerName,
     });
   }
 
