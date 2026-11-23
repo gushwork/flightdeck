@@ -10,7 +10,7 @@
 
 ## Project Overview
 
-Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, VPC multi-view explorer (read-only), IAM Access Analyzer, IAM cross-account copy, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management. The AI chat agent was **removed** (2026-08-25); all data flows only to AWS/GitHub/Fly APIs with local credentials.
+Flightdeck — a web app covering **AWS** (Secrets Manager, Amplify Gen 1, Route 53 / Fly domains, VPC multi-view explorer (read-only), IAM Access Analyzer, IAM cross-account copy, IAM MFA enforcement, CloudTrail), **GitHub Actions** monitoring and control, and **Fly.io** app health and secrets management. The AI chat agent was **removed** (2026-08-25); all data flows only to AWS/GitHub/Fly APIs with local credentials.
 
 Target: single operator managing secrets, Amplify env configuration, access findings, and GitHub Actions workflows for a small team, one or more AWS accounts via profiles.
 
@@ -60,7 +60,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │       ├── secrets.ts      # list, batch get, get/put value, create, versions, describe, resource policy
 │       ├── amplify.ts      # ListApps, app snapshot, branch env, search env vars, UpdateApp/UpdateBranch env
 │       ├── iam.ts          # IAM search, exists, copy (roles/users/customer-managed policies), create-user (console access + keys + permission cloning from template); ListUsers, CreateLoginProfile, CreateAccessKey, password policy handling, sign-in URL generation
-│       ├── sts.ts          # getAccountId via GetCallerIdentity
+│       ├── iam-mfa.ts      # MFA enforcement: getMfaOverview (users + MFA devices / console / active keys, policy attachments incl. via groups), applyMfaChange (create/update FlightdeckEnforceMFA, attach/detach per user; never enforces on the caller's own IAM user) — tested with a mocked IAMClient
+│       ├── sts.ts          # getAccountId / getCallerIdentity via GetCallerIdentity
 │       ├── vpc.ts          # EC2: listVpcs — account-wide Describe* once, grouped per VPC (subnets, RTs, IGW/EIGW, NAT, endpoints, instances, ENIs, SGs, NACLs, peering, TGW, VGW, flow logs, DHCP); optional calls degrade to `warnings`; merges vpc-services.ts results
 │       ├── vpc-services.ts # ELBv2 (listeners/rules/target health), RDS, Lambda (SWR cache + 3s budget → `pending`), ElastiCache, ECS; drain/optional helpers; header rule values masked
 │       ├── analyzer.ts
@@ -158,6 +159,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │   ├── iam/page.tsx        # IAM module sub-dashboard (links to utilities)
 │   ├── iam/cross-account-copy/page.tsx # Search + copy UI
 │   ├── iam/create-user/page.tsx
+│   ├── iam/enforce-mfa/page.tsx # MFA status table, filters, select users / "Enforce on all users", confirm with access-key impact, per-user results
 │   ├── amplify/page.tsx           # List Amplify apps
 │   ├── amplify/search/page.tsx    # Env variable search across apps/branches
 │   ├── amplify/[appId]/page.tsx  # App detail + per-branch env editing
@@ -183,7 +185,7 @@ Target: single operator managing secrets, Amplify env configuration, access find
 │       │   ├── apps/[appId]/branches/[branchName]/route.ts
 │       │   └── search/route.ts
 │       ├── analyzer/route.ts
-│       ├── iam/ (search, exists, copy, whoami, users, create-user)
+│       ├── iam/ (search, exists, copy, whoami, users, create-user, mfa)
 │       └── secrets/...
 │       ├── fly/
 │       │   └── apps/
@@ -251,6 +253,8 @@ Target: single operator managing secrets, Amplify env configuration, access find
 | GET | `/api/iam/users?region=&profile=` | List IAM usernames in current account/profile |
 | POST | `/api/iam/create-user` | Body: `region`, optional `profile`, `newUserName`, `templateUserName`, optional `includeGroups` — creates user, copies permissions from template, adds console password (PasswordResetRequired=true), access key; returns sign-in URL + credentials |
 | GET | `/api/iam/whoami?region=&profile=` | Returns `accountId` for labels |
+| GET | `/api/iam/mfa?region=&profile=` | `IamMfaOverview`: every IAM user with MFA device count, console access, active access keys, whether `FlightdeckEnforceMFA` applies (direct or via group), the caller's own user, policy state (`exists`, `upToDate`) |
+| POST | `/api/iam/mfa` | Body: `region`, optional `profile`, `action` (`enforce` \| `remove`), and `userNames` (max 1000) or `allUsers: true`. Creates/updates the policy when enforcing, attaches/detaches per user, returns per-user `status` (`changed` \| `unchanged` \| `skipped` \| `error`). Same-origin JSON only |
 | GET | `/api/costs?refresh=1` | `{ snapshot: CostsSnapshot }` — last-month + month-to-date spend for AWS, Azure, GCP via local CLIs; never errors (per-provider `status`); `refresh=1` bypasses the 1h cache (2 AWS Cost Explorer calls per profile, $0.01 each) |
 | GET | `/api/vpc?region=&profile=` | `{ vpcs: VpcDetail[], warnings, pending }` — read-only detail for every VPC in the region incl. load balancers, RDS/Lambda/ElastiCache/ECS, `findings`/`score` |
 | GET | `/api/github/repos` | List all repos the authenticated gh CLI user can access |
@@ -328,6 +332,13 @@ Target: single operator managing secrets, Amplify env configuration, access find
 - [`app/iam/page.tsx`](app/iam/page.tsx): module overview with cards for cross-account copy and create-user.
 - [`app/iam/cross-account-copy/page.tsx`](app/iam/cross-account-copy/page.tsx): search (type toggles), target profile select, copy with overwrite dialog when entity exists in target account.
 - [`app/iam/create-user/page.tsx`](app/iam/create-user/page.tsx): form with username input + template user dropdown (populated via `/api/iam/users`), optional group membership, confirmation dialog, success panel showing sign-in URL/credentials with copy buttons.
+- [`app/iam/enforce-mfa/page.tsx`](app/iam/enforce-mfa/page.tsx): require MFA for one, several or all IAM users. AWS has no per-user MFA switch, so Flightdeck attaches the customer-managed policy **`FlightdeckEnforceMFA`** (document built in [`lib/iam/mfa.ts`](lib/iam/mfa.ts), client-safe; pure plan/validation helpers tested in `mfa.test.ts`). Until the user signs in with MFA it denies every action except `iam:ChangePassword`, own MFA device setup and `sts:GetSessionToken` (`BoolIfExists aws:MultiFactorAuthPresent=false`), so:
+  - Users can still finish a forced password reset (Create user sets `PasswordResetRequired`) and enroll a device.
+  - Calls signed with long-term access keys are denied unless made with an MFA session (`aws sts get-session-token`); the confirm dialog lists affected users (programmatic-only users first).
+  - The IAM user the profile signs in as is always skipped on enforce (it would lock Flightdeck out); removing is allowed.
+  - Enforcement through a group that has the policy attached is shown ("Via group …") but never changed from here.
+  - The policy is created on first enforce; if its default version drifts it gets a new version on the next enforce (oldest non-default version pruned at IAM's 5-version limit). Remove only detaches; the policy stays.
+  - IAM permissions needed: `iam:ListUsers`, `ListMFADevices`, `GetLoginProfile`, `ListAccessKeys`, `GetPolicy`, `GetPolicyVersion`, `ListEntitiesForPolicy`, `GetGroup`; for changes also `CreatePolicy`, `CreatePolicyVersion`, `ListPolicyVersions`, `DeletePolicyVersion`, `AttachUserPolicy`, `DetachUserPolicy`, `TagPolicy`.
 
 ## VPC UI
 

@@ -37,7 +37,7 @@ export function ConfirmDialog({
         </h3>
         <p className="mt-2 text-sm text-(--text-secondary)">{message}</p>
         {detail && (
-          <div className="mt-3 max-h-40 overflow-y-auto rounded-md bg-(--bg-surface) p-3 font-(family-name:--font-mono) text-xs text-(--text-muted)">
+          <div className="mt-3 max-h-40 overflow-y-auto whitespace-pre-line rounded-md bg-(--bg-surface) p-3 font-(family-name:--font-mono) text-xs text-(--text-muted)">
             {detail}
           </div>
         )}

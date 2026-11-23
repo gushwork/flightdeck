@@ -12,3 +12,15 @@ export async function getAccountId(
   }
   return out.Account;
 }
+
+export async function getCallerIdentity(
+  region: string,
+  profile?: string,
+): Promise<{ accountId: string; arn: string }> {
+  const client = new STSClient(awsClientOptions(region, profile));
+  const out = await client.send(new GetCallerIdentityCommand({}));
+  if (!out.Account || !out.Arn) {
+    throw new Error('STS did not return the caller identity');
+  }
+  return { accountId: out.Account, arn: out.Arn };
+}

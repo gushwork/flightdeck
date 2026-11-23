@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useAwsWorkspace } from "@/lib/context/aws-workspace-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SearchableSelect } from "@/components/searchable-select";
@@ -293,7 +294,11 @@ export default function IamCreateUserPage() {
           <div className="mt-6 pt-6 border-t border-(--border) text-xs text-(--text-secondary)">
             Credentials have been created. The user must sign in at the URL above and will be prompted to change their password.
             <br />
-            Consider enabling MFA for this user in the AWS console.
+            To require MFA for this user, use{" "}
+            <Link href="/iam/enforce-mfa" className="font-medium text-(--accent) hover:underline">
+              Enforce MFA
+            </Link>
+            .
           </div>
         </div>
       )}
