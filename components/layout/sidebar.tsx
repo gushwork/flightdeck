@@ -79,6 +79,12 @@ const icons: Record<NavIconId, React.ReactNode> = {
       <path d="M2.5 13.5v-.5a3.5 3.5 0 017 0v.5M11 5v3M12.5 6.5H9.5" />
     </svg>
   ),
+  mfa: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="4" y="1.5" width="8" height="13" rx="1.5" />
+      <path d="M6.25 8.25l1.25 1.25 2.25-2.5" />
+    </svg>
+  ),
   playCircle: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <rect x="2" y="3" width="12" height="10" rx="1.5" />
@@ -253,6 +259,8 @@ function isNavActive(href: string, pathname: string): boolean {
     return pathname.startsWith("/iam/cross-account-copy");
   if (href === "/iam/create-user")
     return pathname.startsWith("/iam/create-user");
+  if (href === "/iam/enforce-mfa")
+    return pathname.startsWith("/iam/enforce-mfa");
   if (href === "/route53") return pathname === "/route53";
   if (href === "/route53/fly-domains")
     return pathname.startsWith("/route53/fly-domains");

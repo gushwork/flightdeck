@@ -11,7 +11,12 @@ import {
   type BreadcrumbItem,
 } from "@/lib/nav/breadcrumb-context";
 
-const BREADCRUMB_LABELS: Record<string, string> = { vpc: "VPC", costs: "Cloud spend" };
+const BREADCRUMB_LABELS: Record<string, string> = {
+  vpc: "VPC",
+  costs: "Cloud spend",
+  iam: "IAM",
+  "enforce-mfa": "Enforce MFA",
+};
 
 function deriveBreadcrumb(pathname: string): BreadcrumbItem[] {
   if (pathname === "/") return [{ label: "Needs attention" }];

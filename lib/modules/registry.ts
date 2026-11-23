@@ -28,6 +28,7 @@ export type NavIconId =
   | "shield"
   | "arrowsExchange"
   | "userPlus"
+  | "mfa"
   | "github"
   | "playCircle"
   | "listRuns"
@@ -146,6 +147,7 @@ export const MODULE_NAV: ModuleNavSection[] = [
             icon: "arrowsExchange",
           },
           { href: "/iam/create-user", label: "Create user", icon: "userPlus" },
+          { href: "/iam/enforce-mfa", label: "Enforce MFA", icon: "mfa" },
         ],
       },
     ],
